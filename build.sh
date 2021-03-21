@@ -9,8 +9,8 @@ usage() {
     printf "\nSYNOPSIS\n"
     printf "\n\t%-5s\n" "./build.sh [OPTION]" 
     printf "\nOPTIONS\n" 
-    printf "\n\t%-5s  %-40s\n"  "1"  "build raser docker image" 
-    printf "\n\t%-5s  %-40s\n"  "2"  "build KDetSim"
+    printf "\n\t%-5s  %-40s\n"  "1"  "build docker image" 
+    printf "\n\t%-5s  %-40s\n"  "2"  "build binary file"
     printf "\n\n" 
 }
 
@@ -24,13 +24,12 @@ fi
 
 
 case $option in 
-    1) echo "Building raser docker image..."
+    1) echo "Building docker image ..."
        docker build -t raser .  
        ;;
-    2) echo "Building KDetSim ..."
-        cd KDetSim
-        mkdir obj 
-        make -f makeLinuxMacRoot6 KDetSimLinux   
+    2) echo "Building binary file ..."
+       docker run --rm -it -h raser  -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$ip:0 --mount type=bind,source=$HOME/raser,target=/home/physicist raser bash  
+       make    
        ;;
 esac
 

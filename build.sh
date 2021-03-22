@@ -27,8 +27,12 @@ case $option in
     1) echo "Building docker image ..."
        docker build -t raser .  
        ;;
-    2) echo "Building binary file ..."
+    2) echo "Building binary file ... on Mac"
        docker run --rm -it -h raser  -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$ip:0 --mount type=bind,source=$HOME/raser,target=/home/physicist raser bash  
+       make    
+       ;;
+    3) echo "Building binary file ...on Windows"
+       docker run --rm -it -h raser  --mount type=bind,source=C:\\Users\\hello\\raser,target=/home/physicist raser bash  
        make    
        ;;
 esac

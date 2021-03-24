@@ -32,8 +32,8 @@ case $option in
        make    
        ;;
     3) echo "Building binary file ...on Windows"
-       docker run --rm -it -h raser -e DISPLAY=10.0.75.1:0  --mount type=bind,source=C:\\Users\\hello\\raser,target=/home/physicist raser bash  
-       make    
+       docker run --rm -it -h raser -e DISPLAY=192.168.237.32:0  --mount type=bind,source=C:\\Users\\dell\\raser,target=/home/physicist raser bash  
+       #make    
        ;;
 esac
 

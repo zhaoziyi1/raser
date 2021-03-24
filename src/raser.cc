@@ -2201,8 +2201,8 @@ int main(int argc, char** argv) {
 	}
 	*/
 
-	//TApplication theApp("App", 0, 0);
-	//theApp.SetReturnFromRun(true);
+	TApplication theApp("App", 0, 0);
+	theApp.SetReturnFromRun(true);
 	//drawIV(inputFiles); 
 
 	// Start the Test3D_SiC_One
@@ -2255,7 +2255,7 @@ int main(int argc, char** argv) {
 	det->ShowMipIR(150);
 
 
-	//theApp.Run();
+	theApp.Run();
 }
 
 #endif

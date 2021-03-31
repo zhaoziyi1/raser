@@ -2455,111 +2455,91 @@ TCanvas* drawIV(std::vector<TString> inputFiles){
 #ifndef __CINT__ 
 
 void print_usage(){
-	printf("NAME\n\tdrawIV - draw IV curves from log files\n");
-	printf("\nSYNOPSIS\n\tdrawIV [-b] [-h] file1 file2 ...\n");
+	printf("NAME\n\traser - REdiation SEmiconductoR\n");
+	printf("\nSYNOPSIS\n\traser arg ...\n");
 	printf("\nOPTIONS\n");
 	printf("\t%-5s  %-40s\n", "-h", "Print this message");
-	printf("\t%-5s  %-40s\n", "-b", "Batch mode, save to pdf file directly");
-	printf("\nAUTHOR\n\tXin Shi <Xin.Shi@cern.ch>\n");
+	printf("\t%-5s  %-40s\n", "3D", "3D KDetSim");
+	printf("\t%-5s  %-40s\n", "2D", "2D KDetSim");
+	printf("\nAUTHOR\n\tXin Shi <shixin@ihep.ac.cn>\n");
 }
+
 
 int main(int argc, char** argv) {
 
-	/*
 	if (argc < 2) {
 		print_usage() ;  
 		return -1; 
 	}
 
-	//    K3D *det = new K3D(7, 80, 80, 300);
-
-	bool doBatch(false);
-	std::vector<TString> inputFiles(argv+1, argv+argc);
-	TString outFile = "test.pdf";
-
-	for (int i = 0; i < argc; i++){
-		if (!strcmp(argv[i], "-h")) {
-			print_usage();
-			break; 
-		}
-
-		if (!strcmp(argv[i], "-b")) {
-			doBatch = true;
-			inputFiles.erase(inputFiles.begin()+i-1);
-		}
-	}
-
-	if (doBatch) { 
-		std::cout << "Run in batch mode ... " << std::endl;
-		TCanvas *c = drawIV(inputFiles);
-		c->SaveAs(outFile);
-		delete c;
-		gSystem->Exit(0);
-	}
-	*/
-
 	TApplication theApp("App", 0, 0);
 	theApp.SetReturnFromRun(true);
-	//drawIV(inputFiles); 
-
-	// Start the Test3D_SiC_One
 	gStyle->SetCanvasPreferGL(kTRUE);
-	
-	// define a 3D detector with 5 electrodes
-	// x=100 , y is 50 and thickness 120
-	K3D *det = new K3D(7, 80, 80, 300);
-	
-	det->Voltage = 50;  
-	// define the drift mesh size and simulation mesh size in microns
-	det->SetUpVolume(1, 4);
-	// define  columns #, postions, weigthing factor 2=0 , material Al=1
-	det->SetUpColumn(0, 40, 15, 4, 280, 2, 1);
-	det->SetUpColumn(1, 40, 65, 4, 280, 2, 1);
-	det->SetUpColumn(2, 61.65, 27.5, 4, 280, 2, 1);
-	det->SetUpColumn(3, 61.65, 52.5, 4, 280, 2, 1);
-	det->SetUpColumn(4, 18.35, 27.5, 4, 280, 2, 1);
-	det->SetUpColumn(5, 18.35, 52.5, 4, 280, 2, 1);
-	det->SetUpColumn(6, 40, 40, 4, -280, 16385, 1);
-	det->Temperature = 300;
-	det->SetDriftHisto(1.2e-9, 36);
-	Float_t Pos[3] = {80, 80, 1};
-	Float_t Size[3] = {80, 80, 2};
-	det->ElRectangle(Pos, Size, 0, 20);  ///how to use?
 
-	det->SetUpElectrodes();
-	det->SetBoundaryConditions();
-	//define the space charge
-	TF3 *f2 = new TF3("f2", "x[0]*x[1]*x[2]*0+[0]", 0, 3000, 0, 3000, 0, 3000);
-	f2->SetParameter(0, -2);
-	det->NeffF = f2;
+		for (int i = 0; i < argc; i++){
+			if (!strcmp(argv[i], "-h")) {
+				print_usage();
+				break; 
+			}
 
-	// calculate weigting field
-	// calculate electric field
-	det->CalField(0);
-	det->CalField(1);
-	// set entry points of the track
-	det->enp[0] = 25;
-	det->enp[1] = 40;
-	det->enp[2] = 260;
-	det->exp[0] = 25;
-	det->exp[1] = 40;
-	det->exp[2] = 40;
+				if (!strcmp(argv[i], "3D")) {
+				// define a 3D detector with 5 electrodes
+				// x=100 , y is 50 and thickness 120
+				K3D *det = new K3D(7, 80, 80, 300);	
+			det->Voltage = 50;  
+			// define the drift mesh size and simulation mesh size in microns
+			det->SetUpVolume(1, 4);
+			// define  columns #, postions, weigthing factor 2=0 , material Al=1
+			det->SetUpColumn(0, 40, 15, 4, 280, 2, 1);
+			det->SetUpColumn(1, 40, 65, 4, 280, 2, 1);
+			det->SetUpColumn(2, 61.65, 27.5, 4, 280, 2, 1);
+			det->SetUpColumn(3, 61.65, 52.5, 4, 280, 2, 1);
+			det->SetUpColumn(4, 18.35, 27.5, 4, 280, 2, 1);
+			det->SetUpColumn(5, 18.35, 52.5, 4, 280, 2, 1);
+			det->SetUpColumn(6, 40, 40, 4, -280, 16385, 1);
+			det->Temperature = 300;
+			det->SetDriftHisto(1.2e-9, 36);
+			Float_t Pos[3] = {80, 80, 1};
+			Float_t Size[3] = {80, 80, 2};
+			det->ElRectangle(Pos, Size, 0, 20);  ///how to use?
 
-	// switch on the diffusion
-	det->diff = 1;
-	// Show mip track
-	TCanvas c1;
-	c1.cd();
-	det->ShowMipIR(150);
-	TCanvas c3;
-	c3.cd();
-	det->MipIR(100);
-	det->sum->Draw("HIST");  //total current
-	det->neg->Draw("HIST same");  //electrons current
-	det->pos->Draw("HIST same"); // hole current
+			det->SetUpElectrodes();
+			det->SetBoundaryConditions();
+			//define the space charge
+			TF3 *f2 = new TF3("f2", "x[0]*x[1]*x[2]*0+[0]", 0, 3000, 0, 3000, 0, 3000);
+			f2->SetParameter(0, -2);
+			det->NeffF = f2;
 
-	theApp.Run();
-}
+			// calculate weigting field
+			// calculate electric field
+			det->CalField(0);
+			det->CalField(1);
+			// set entry points of the track
+			det->enp[0] = 25;
+			det->enp[1] = 40;
+			det->enp[2] = 260;
+			det->exp[0] = 25;
+			det->exp[1] = 40;
+			det->exp[2] = 40;
+
+			// switch on the diffusion
+			det->diff = 1;
+			// Show mip track
+			TCanvas c1;
+			c1.cd();
+			det->ShowMipIR(150);
+			TCanvas c3;
+			c3.cd();
+			det->MipIR(100);
+			det->sum->Draw("HIST");  //total current
+			det->neg->Draw("HIST same");  //electrons current
+			det->pos->Draw("HIST same"); // hole current
+
+			theApp.Run();
+
+			}	
+		}
+}	
 
 #endif
 

@@ -6,16 +6,3 @@ docker build -t raser .
 
 
 
-    raser) echo "Building raser binary ... "
-       make    
-       ;;
-    3) echo "Building binary file ...on Windows"
-       docker run --rm -it -h raser -e DISPLAY=192.168.237.32:0  --mount type=bind,source=C:\\Users\\dell\\raser,target=/home/physicist raser bash  
-       #make    
-       ;;
-esac
-
-
-
-
-

@@ -665,6 +665,7 @@ class KGeometry
 		TH3F *GetGeom();
 		Float_t GetLowEdge(Int_t);
 		Float_t GetUpEdge(Int_t);
+		Double_t GetStepSize(Int_t, Int_t);
 		//   ClassDef(KGeometry,1) 
 };
 
@@ -973,8 +974,31 @@ Float_t KGeometry::GetLowEdge(Int_t dir)
 	}
 	return ret;
 }
-
-
+Double_t KGeometry::GetStepSize(Int_t dir, Int_t i)
+{
+  Double_t Lo,Hi;
+  Double_t ret;
+  switch(dir)
+    {
+    case 0:
+      Hi=fabs(EG->GetXaxis()->GetBinCenter(i+1)-EG->GetXaxis()->GetBinCenter(i));
+      Lo=fabs(EG->GetXaxis()->GetBinCenter(i)-EG->GetXaxis()->GetBinCenter(i-1));
+      break;
+    case 1:
+       Hi=fabs(EG->GetYaxis()->GetBinCenter(i+1)-EG->GetYaxis()->GetBinCenter(i));
+       Lo=fabs(EG->GetYaxis()->GetBinCenter(i)-EG->GetYaxis()->GetBinCenter(i-1));
+      break;
+    case 2:
+       Hi=fabs(EG->GetZaxis()->GetBinCenter(i+1)-EG->GetZaxis()->GetBinCenter(i));
+       Lo=fabs(EG->GetZaxis()->GetBinCenter(i)-EG->GetZaxis()->GetBinCenter(i-1));
+      break;
+    default:
+      Hi=-1; Lo=-1;
+      break;
+    }
+  ret=0.5*Hi+0.5*Lo;
+  return ret;
+}
 
 
 
@@ -2321,6 +2345,97 @@ void K3D::SetUpElectrodes(Int_t back)
 }
 
 
+// KPad 
+
+class KPad : public KDetector
+{
+private:
+//Runge Kutta method for solving the field
+  void           rk4(float *,float *,int,float,float,float*); 
+  Float_t        rtbis(float, float, float);
+  Float_t        PoEqSolve(Float_t);
+  void           Derivs(float x,float *,float *);
+  TArrayF PhyPot;       //electric potential
+  TArrayF PhyField;     //electric field 
+public:
+   TF1     *Neff;   // effective dopping concentration 
+   Float_t CellY;   // thickness of the diode
+   Float_t CellX;   // width of the diode
+
+   KPad(Float_t=50,Float_t=301);
+  ~KPad(); 
+   void SetUpVolume(Float_t,Int_t =0); 
+    void SetUpElectrodes();
+	   TGraph   *DrawPad(char*);
+};
+
+KPad::KPad(Float_t x,Float_t y)
+{
+  //Constructor of the class KPad:
+  //		Float_t x ; width of the diode in um. For the simulation it is not neccessary to put real dimensions
+  //		Float_t y ; thickness in um
+  Neff=NULL;
+  CellX=x;  CellY=y;
+}
+ 
+ KPad::~KPad()
+{
+}
+
+void KPad::SetUpVolume(Float_t St1, Int_t Mat)
+{
+  nx=(Int_t) (CellX/St1);
+  ny=(Int_t) (CellY/St1);
+  nz=1;
+  //Set the boundary condition matrix //
+  EG=new TH3I("EG","EG",nx,0,CellX,ny,0,CellY,1,0,1);
+  EG->GetXaxis()->SetTitle("x [#mum]");
+  EG->GetYaxis()->SetTitle("y [#mum]");
+
+  DM=new TH3I("DM","DM",nx,0,CellX,ny,0,CellY,1,0,1);
+  DM->GetXaxis()->SetTitle("x [#mum]");
+  DM->GetYaxis()->SetTitle("y [#mum]");
+  for(int i=0;i<nx;i++) 
+     for(int j=0;j<ny;j++)
+        DM->SetBinContent(i,j,1,Mat);
+}
+
+void KPad::SetUpElectrodes()
+{
+ 
+ for(int i=1;i<=nx;i++){ EG->SetBinContent(i,1,1,2);  EG->SetBinContent(i,ny,1,16385);} 
+ // KMaterial::Mat=10;
+  //Default track
+ enp[0]=CellX/2;  exp[0]=enp[0];
+ enp[1]=1;        exp[1]=CellY;
+
+ if(Neff!=NULL ) 
+   {CalField(0); CalField(1);} 
+ else 
+   printf("Please define space charge function Neff before field calculation\n");
+ 
+}
+
+TGraph *KPad::DrawPad(char *option)
+{
+  //Draws potential "p" or  electric field "f"
+Char_t Opt[10];
+TGraph *gr;
+TArrayF xx=TArrayF(ny+1);
+ for(Int_t i=0;i<=ny;i++) xx[i]=(Float_t)i*GetStepSize(1,i);
+
+if(strchr(option,'p')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyPot.GetArray());
+if(strchr(option,'f')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyField.GetArray());
+if(strchr(option,'s')!=NULL) sprintf(Opt,"CP"); else  sprintf(Opt,"ACP"); 
+//if(! strcmp(option,"p")) gr=new TGraph(ny,xx.GetArray(),PhyPot.GetArray());
+//if(! strcmp(option,"f")) gr=new TGraph(ny,xx.GetArray(),PhyField.GetArray());
+gr->Draw(Opt);
+gr->GetHistogram()->Draw();
+gr->Draw(Opt);
+return gr;
+}
+
+
 
 
 void set_root_style(int stat=1110, int grid=0){
@@ -2455,111 +2570,107 @@ TCanvas* drawIV(std::vector<TString> inputFiles){
 #ifndef __CINT__ 
 
 void print_usage(){
-	printf("NAME\n\tdrawIV - draw IV curves from log files\n");
-	printf("\nSYNOPSIS\n\tdrawIV [-b] [-h] file1 file2 ...\n");
+	printf("NAME\n\traser - REdiation SEmiconductoR\n");
+	printf("\nSYNOPSIS\n\traser arg ...\n");
 	printf("\nOPTIONS\n");
 	printf("\t%-5s  %-40s\n", "-h", "Print this message");
-	printf("\t%-5s  %-40s\n", "-b", "Batch mode, save to pdf file directly");
-	printf("\nAUTHOR\n\tXin Shi <Xin.Shi@cern.ch>\n");
+	printf("\t%-5s  %-40s\n", "3D", "3D KDetSim");
+	printf("\t%-5s  %-40s\n", "2D", "2D KDetSim");
+	printf("\nAUTHOR\n\tXin Shi <shixin@ihep.ac.cn>\n");
 }
+
 
 int main(int argc, char** argv) {
 
-	/*
-	if (argc < 2) {
-		print_usage() ;  
-		return -1; 
+	if (argc < 2)
+	{
+		print_usage();
+		return -1;
 	}
-
-	//    K3D *det = new K3D(7, 80, 80, 300);
-
-	bool doBatch(false);
-	std::vector<TString> inputFiles(argv+1, argv+argc);
-	TString outFile = "test.pdf";
-
-	for (int i = 0; i < argc; i++){
-		if (!strcmp(argv[i], "-h")) {
-			print_usage();
-			break; 
-		}
-
-		if (!strcmp(argv[i], "-b")) {
-			doBatch = true;
-			inputFiles.erase(inputFiles.begin()+i-1);
-		}
-	}
-
-	if (doBatch) { 
-		std::cout << "Run in batch mode ... " << std::endl;
-		TCanvas *c = drawIV(inputFiles);
-		c->SaveAs(outFile);
-		delete c;
-		gSystem->Exit(0);
-	}
-	*/
 
 	TApplication theApp("App", 0, 0);
 	theApp.SetReturnFromRun(true);
-	//drawIV(inputFiles); 
-
-	// Start the Test3D_SiC_One
 	gStyle->SetCanvasPreferGL(kTRUE);
-	
-	// define a 3D detector with 5 electrodes
-	// x=100 , y is 50 and thickness 120
-	K3D *det = new K3D(7, 80, 80, 300);
-	
-	det->Voltage = 50;  
-	// define the drift mesh size and simulation mesh size in microns
-	det->SetUpVolume(1, 4);
-	// define  columns #, postions, weigthing factor 2=0 , material Al=1
-	det->SetUpColumn(0, 40, 15, 4, 280, 2, 1);
-	det->SetUpColumn(1, 40, 65, 4, 280, 2, 1);
-	det->SetUpColumn(2, 61.65, 27.5, 4, 280, 2, 1);
-	det->SetUpColumn(3, 61.65, 52.5, 4, 280, 2, 1);
-	det->SetUpColumn(4, 18.35, 27.5, 4, 280, 2, 1);
-	det->SetUpColumn(5, 18.35, 52.5, 4, 280, 2, 1);
-	det->SetUpColumn(6, 40, 40, 4, -280, 16385, 1);
-	det->Temperature = 300;
-	det->SetDriftHisto(1.2e-9, 36);
-	Float_t Pos[3] = {80, 80, 1};
-	Float_t Size[3] = {80, 80, 2};
-	det->ElRectangle(Pos, Size, 0, 20);  ///how to use?
 
-	det->SetUpElectrodes();
-	det->SetBoundaryConditions();
-	//define the space charge
-	TF3 *f2 = new TF3("f2", "x[0]*x[1]*x[2]*0+[0]", 0, 3000, 0, 3000, 0, 3000);
-	f2->SetParameter(0, -2);
-	det->NeffF = f2;
+	for (int i = 0; i < argc; i++)
+	{
+		if (!strcmp(argv[i], "-h"))
+		{
+			print_usage();
+			break;
+		}
 
-	// calculate weigting field
-	// calculate electric field
-	det->CalField(0);
-	det->CalField(1);
-	// set entry points of the track
-	det->enp[0] = 25;
-	det->enp[1] = 40;
-	det->enp[2] = 260;
-	det->exp[0] = 25;
-	det->exp[1] = 40;
-	det->exp[2] = 40;
+		if (!strcmp(argv[i], "3D"))
+		{
+			// define a 3D detector with 5 electrodes
+			// x=100 , y is 50 and thickness 120
+			K3D *det = new K3D(7, 80, 80, 300);
+			det->Voltage = 50;
+			// define the drift mesh size and simulation mesh size in microns
+			det->SetUpVolume(1, 4);
+			// define  columns #, postions, weigthing factor 2=0 , material Al=1
+			det->SetUpColumn(0, 40, 15, 4, 280, 2, 1);
+			det->SetUpColumn(1, 40, 65, 4, 280, 2, 1);
+			det->SetUpColumn(2, 61.65, 27.5, 4, 280, 2, 1);
+			det->SetUpColumn(3, 61.65, 52.5, 4, 280, 2, 1);
+			det->SetUpColumn(4, 18.35, 27.5, 4, 280, 2, 1);
+			det->SetUpColumn(5, 18.35, 52.5, 4, 280, 2, 1);
+			det->SetUpColumn(6, 40, 40, 4, -280, 16385, 1);
+			det->Temperature = 300;
+			det->SetDriftHisto(1.2e-9, 36);
+			Float_t Pos[3] = {80, 80, 1};
+			Float_t Size[3] = {80, 80, 2};
+			det->ElRectangle(Pos, Size, 0, 20); ///how to use?
 
-	// switch on the diffusion
-	det->diff = 1;
-	// Show mip track
-	TCanvas c1;
-	c1.cd();
-	det->ShowMipIR(150);
-	TCanvas c3;
-	c3.cd();
-	det->MipIR(100);
-	det->sum->Draw("HIST");  //total current
-	det->neg->Draw("HIST same");  //electrons current
-	det->pos->Draw("HIST same"); // hole current
+			det->SetUpElectrodes();
+			det->SetBoundaryConditions();
+			//define the space charge
+			TF3 *f2 = new TF3("f2", "x[0]*x[1]*x[2]*0+[0]", 0, 3000, 0, 3000, 0, 3000);
+			f2->SetParameter(0, -2);
+			det->NeffF = f2;
 
-	theApp.Run();
+			// calculate weigting field
+			// calculate electric field
+			det->CalField(0);
+			det->CalField(1);
+			// set entry points of the track
+			det->enp[0] = 25;
+			det->enp[1] = 40;
+			det->enp[2] = 260;
+			det->exp[0] = 25;
+			det->exp[1] = 40;
+			det->exp[2] = 40;
+
+			// switch on the diffusion
+			det->diff = 1;
+			// Show mip track
+			TCanvas c1;
+			c1.cd();
+			det->ShowMipIR(150);
+			TCanvas c3;
+			c3.cd();
+			det->MipIR(100);
+			det->sum->Draw("HIST");		 //total current
+			det->neg->Draw("HIST same"); //electrons current
+			det->pos->Draw("HIST same"); // hole current
+			theApp.Run();
+		} // End "3D"
+
+		if (!strcmp(argv[i], "2D"))
+		{
+			TF1 *neff = new TF1("neff", "[0]+x[0]*0", 0, 1000);
+			neff->SetParameter(0, 0.2);
+			KPad det(50, 300);
+			det.Neff = neff;
+			det.Voltage = -200;
+			det.SetUpVolume(1);
+			det.SetUpElectrodes();
+			det.DrawPad("f");
+			theApp.Run();
+		} // End "2D"
+	}
+
+
 }
 
 #endif
-

@@ -364,14 +364,17 @@ Float_t KMaterial::Perm(Int_t Material)
 	switch (Material)
 	{
 	case 0:
+		perm = 9.76;
+		break; //silicon carbide
+	case 1:
+		perm = 1;
+		break; //aluminum or air
+	case 3:
 		perm = 11.7;
 		break; //silicon
-	case 1:
+	case 4:
 		perm = 11.7;
 		break; //poly silicon
-	case 2:
-		perm = 3.9;
-		break; //silicon oxide 2.648
 	case 10:
 		perm = 5.7;
 		break; //diamond
@@ -2618,9 +2621,9 @@ int main(int argc, char** argv) {
 			det->SetUpColumn(6, 40, 40, 4, -280, 16385, 1);
 			det->Temperature = 300;
 			det->SetDriftHisto(1.2e-9, 36);
-			Float_t Pos[3] = {80, 80, 1};
-			Float_t Size[3] = {80, 80, 2};
-			det->ElRectangle(Pos, Size, 0, 20); ///how to use?
+			// Float_t Pos[3] = {80, 80, 1};
+			// Float_t Size[3] = {80, 80, 2};
+			// det->ElRectangle(Pos, Size, 0, 20); ///how to use?
 
 			det->SetUpElectrodes();
 			det->SetBoundaryConditions();
@@ -2635,10 +2638,10 @@ int main(int argc, char** argv) {
 			det->CalField(1);
 			// set entry points of the track
 			det->enp[0] = 25;
-			det->enp[1] = 40;
+			det->enp[1] = 38;
 			det->enp[2] = 260;
 			det->exp[0] = 25;
-			det->exp[1] = 40;
+			det->exp[1] = 38;
 			det->exp[2] = 40;
 
 			// switch on the diffusion
@@ -2649,10 +2652,11 @@ int main(int argc, char** argv) {
 			det->ShowMipIR(150);
 			TCanvas c3;
 			c3.cd();
-			det->MipIR(100);
+			det->MipIR(2000);
 			det->sum->Draw("HIST");		 //total current
-			det->neg->Draw("HIST same"); //electrons current
-			det->pos->Draw("HIST same"); // hole current
+			// det->neg->Draw("HIST same"); //electrons current
+			// det->pos->Draw("HIST same"); // hole current
+			c3.SaveAs("txt/SiC_center_current_perm.C");
 			theApp.Run();
 		} // End "3D"
 
@@ -2672,5 +2676,5 @@ int main(int argc, char** argv) {
 
 
 }
-
+ 
 #endif

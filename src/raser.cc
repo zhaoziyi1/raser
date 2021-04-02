@@ -364,15 +364,9 @@ Float_t KMaterial::Perm(Int_t Material)
 	switch (Material)
 	{
 	case 0:
-		perm = 9.76;
-		break; //silicon carbide
-	case 1:
-		perm = 1;
-		break; //aluminum or air
-	case 3:
 		perm = 11.7;
 		break; //silicon
-	case 4:
+	case 1:
 		perm = 11.7;
 		break; //poly silicon
 	case 10:
@@ -1254,7 +1248,24 @@ Double_t KField::Mobility(Float_t E,Float_t T,Float_t Charg,Double_t Neff, Int_t
 
 	switch(which)
 	{
-		case 0:       
+		case 0:
+			//printf("%e ",par[0]);
+			if(Charg>0)
+			{
+				lfm=8.54e5*TMath::Power(T,-1.075)*TMath::Exp(1-T/124.);
+				vsatp=1.445e7*TMath::Exp(-T/435.9);
+				betap=2.49*TMath::Exp(-T/270.3);
+				hfm=lfm/TMath::Power(1+TMath::Power(lfm*E/vsatp,1/betap),betap);
+			}
+			else
+			{
+				lfm=2.712e8*TMath::Power(T,-2.133);
+				vsatn=1.586e7*TMath::Exp(-T/723.6);
+				betan=-8.262e-8*TMath::Power(T,3)+6.817e-5*TMath::Power(T,2)-1.847e-2*T+2.429;
+				hfm=lfm/TMath::Power(1+TMath::Power(lfm*E/vsatn,1/betan),betan);
+			}
+			break;
+		case 1:       
 			alpha=0.72*TMath::Power(T/300,0.065);
 			if(Charg>0)
 			{
@@ -1277,23 +1288,7 @@ Double_t KField::Mobility(Float_t E,Float_t T,Float_t Charg,Double_t Neff, Int_t
 				hfm=2*lfm/(1+TMath::Power(1+TMath::Power(2*lfm*E/vsatn,betan),1/betan));
 			}
 			break;
-		case 1:
-			//printf("%e ",par[0]);
-			if(Charg>0)
-			{
-				lfm=8.54e5*TMath::Power(T,-1.075)*TMath::Exp(1-T/124.);
-				vsatp=1.445e7*TMath::Exp(-T/435.9);
-				betap=2.49*TMath::Exp(-T/270.3);
-				hfm=lfm/TMath::Power(1+TMath::Power(lfm*E/vsatp,1/betap),betap);
-			}
-			else
-			{
-				lfm=2.712e8*TMath::Power(T,-2.133);
-				vsatn=1.586e7*TMath::Exp(-T/723.6);
-				betan=-8.262e-8*TMath::Power(T,3)+6.817e-5*TMath::Power(T,2)-1.847e-2*T+2.429;
-				hfm=lfm/TMath::Power(1+TMath::Power(lfm*E/vsatn,1/betan),betan);
-			}
-			break; 
+ 
 		case 2:   // WF2
 			if(Charg>0)
 			{
@@ -2637,12 +2632,12 @@ int main(int argc, char** argv) {
 			det->CalField(0);
 			det->CalField(1);
 			// set entry points of the track
-			det->enp[0] = 25;
-			det->enp[1] = 38;
-			det->enp[2] = 260;
-			det->exp[0] = 25;
-			det->exp[1] = 38;
-			det->exp[2] = 40;
+			det->enp[0] = 40;
+			det->enp[1] = 27.5;
+			det->enp[2] = 250;
+			det->exp[0] = 40;
+			det->exp[1] = 27.5;
+			det->exp[2] = 50;
 
 			// switch on the diffusion
 			det->diff = 1;
@@ -2652,11 +2647,14 @@ int main(int argc, char** argv) {
 			det->ShowMipIR(150);
 			TCanvas c3;
 			c3.cd();
-			det->MipIR(2000);
+			// int number_pairs_si =76;	//silicon each um
+			// int number_pairs = 51;		//silicon carbide
+			//det->MipIR(1520);     // hole-electron paris of silicon
+			det->MipIR(1020);			 // hole-electron paris of silicon carbide
 			det->sum->Draw("HIST");		 //total current
 			// det->neg->Draw("HIST same"); //electrons current
 			// det->pos->Draw("HIST same"); // hole current
-			c3.SaveAs("txt/SiC_center_current_perm.C");
+			c3.SaveAs("txt/Si_induced_current.C");
 			theApp.Run();
 		} // End "3D"
 

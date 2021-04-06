@@ -69,6 +69,21 @@ void free_dvector(double *v, long nl, long nh)
 	free((FREE_ARG)(v + nl - NR_END));
 }
 
+float *vector(long nl, long nh)
+/* allocate a float vector with subscript range v[nl..nh] */
+{
+	float *v;
+
+	v = (float *)malloc((size_t)((nh - nl + 1 + NR_END) * sizeof(float)));
+	if (!v)
+		nrerror("allocation failure in vector()");
+	return v - nl + NR_END;
+}
+void free_vector(float *v, long nl, long nh)
+/* free a float vector allocated with vector() */
+{
+	free((FREE_ARG)(v + nl - NR_END));
+}
 /***************************************************** 
 atimes : How to multiply the vector with the matrices 
 Modified in this form by GK 4.10.2012
@@ -2343,8 +2358,8 @@ void K3D::SetUpElectrodes(Int_t back)
 }
 
 
-// KPad 
-
+// KPad
+#define JMAX 40
 class KPad : public KDetector
 {
 private:
@@ -2362,78 +2377,219 @@ public:
 
    KPad(Float_t=50,Float_t=301);
   ~KPad(); 
-   void SetUpVolume(Float_t,Int_t =0); 
-    void SetUpElectrodes();
-	   TGraph   *DrawPad(char*);
+   	void SetUpVolume(Float_t,Int_t =0); 
+	void SetUpElectrodes();
+	void GetRamoField();
+	void GetField();
+	TGraph   *DrawPad(char*);
 };
 
 KPad::KPad(Float_t x,Float_t y)
 {
-  //Constructor of the class KPad:
-  //		Float_t x ; width of the diode in um. For the simulation it is not neccessary to put real dimensions
-  //		Float_t y ; thickness in um
-  Neff=NULL;
-  CellX=x;  CellY=y;
+  	//Constructor of the class KPad:
+  	//		Float_t x ; width of the diode in um. For the simulation it is not neccessary to put real dimensions
+  	//		Float_t y ; thickness in um
+ 	Neff=NULL;
+  	CellX=x;  CellY=y;
 }
  
- KPad::~KPad()
+KPad::~KPad()
 {
+}
+
+void KPad::Derivs(float x, float y[], float dydx[])
+{
+	//Double_t permMat=(material==0)?perm:permDi;
+	Double_t permMat = Perm(KMaterial::Mat);
+	Double_t permV = perm0 * 1e-6;
+	;
+	dydx[1] = y[2];
+	dydx[2] = -Neff->Eval(x) * e_0 / (permMat * permV);
+	// if(x>150) dydx[2]*=permMat;
+}
+
+Float_t KPad::PoEqSolve(Float_t der)
+{
+	//TArrayF PhyField(ny+2);
+	//TArrayF PhyPot(ny+2);
+	//Float_t Step=1;
+
+	Int_t i;
+	Float_t h, x = 0;
+
+	Float_t y[3], dydx[3], yout[3];
+
+	y[1] = Voltage;
+	y[2] = der;
+	PhyField[0] = y[2];
+	PhyPot[0] = y[1];
+	Derivs(x, y, dydx);
+	for (i = 1; i <= ny; i++)
+	{
+		h = GetStepSize(1, i);
+		rk4(y, dydx, 2, x, h, yout);
+		//printf("%f %f %f\n",x+h,yout[1],yout[2]);
+		y[1] = yout[1];
+		y[2] = yout[2];
+		PhyField[i] = y[2];
+		PhyPot[i] = y[1];
+		x = x + h;
+		Derivs(x, y, dydx);
+	}
+	//     printf("y[1]=%f\n",xp1);
+	return y[1];
 }
 
 void KPad::SetUpVolume(Float_t St1, Int_t Mat)
 {
-  nx=(Int_t) (CellX/St1);
-  ny=(Int_t) (CellY/St1);
-  nz=1;
-  //Set the boundary condition matrix //
-  EG=new TH3I("EG","EG",nx,0,CellX,ny,0,CellY,1,0,1);
-  EG->GetXaxis()->SetTitle("x [#mum]");
-  EG->GetYaxis()->SetTitle("y [#mum]");
+  	nx=(Int_t) (CellX/St1);
+  	ny=(Int_t) (CellY/St1);
+  	nz=1;
+  	//Set the boundary condition matrix //
+  	EG=new TH3I("EG","EG",nx,0,CellX,ny,0,CellY,1,0,1);
+  	EG->GetXaxis()->SetTitle("x [#mum]");
+  	EG->GetYaxis()->SetTitle("y [#mum]");
 
-  DM=new TH3I("DM","DM",nx,0,CellX,ny,0,CellY,1,0,1);
-  DM->GetXaxis()->SetTitle("x [#mum]");
-  DM->GetYaxis()->SetTitle("y [#mum]");
-  for(int i=0;i<nx;i++) 
-     for(int j=0;j<ny;j++)
-        DM->SetBinContent(i,j,1,Mat);
+  	DM=new TH3I("DM","DM",nx,0,CellX,ny,0,CellY,1,0,1);
+  	DM->GetXaxis()->SetTitle("x [#mum]");
+  	DM->GetYaxis()->SetTitle("y [#mum]");
+  	for(int i=0;i<nx;i++) 
+     	for(int j=0;j<ny;j++)
+        	DM->SetBinContent(i,j,1,Mat);
 }
 
 void KPad::SetUpElectrodes()
 {
  
- for(int i=1;i<=nx;i++){ EG->SetBinContent(i,1,1,2);  EG->SetBinContent(i,ny,1,16385);} 
- // KMaterial::Mat=10;
-  //Default track
- enp[0]=CellX/2;  exp[0]=enp[0];
- enp[1]=1;        exp[1]=CellY;
+ 	for(int i=1;i<=nx;i++){ EG->SetBinContent(i,1,1,2);  EG->SetBinContent(i,ny,1,16385);} 
+ 	// KMaterial::Mat=10;
+  	//Default track
+ 	enp[0]=CellX/2;  exp[0]=enp[0];
+ 	enp[1]=1;        exp[1]=CellY;
 
- if(Neff!=NULL ) 
-   {CalField(0); CalField(1);} 
- else 
-   printf("Please define space charge function Neff before field calculation\n");
+ 	if(Neff!=NULL )
+ 	{
+		GetField();
+		GetRamoField();
+ 	}
+ 	else 
+   		printf("Please define space charge function Neff before field calculation\n");
  
+}
+
+Float_t KPad::rtbis(float x1, float x2, float xacc)
+{
+	void nrerror(char error_text[]);
+	int j;
+	float dx, f, fmid, xmid, rtb;
+
+	f = PoEqSolve(x1);
+	fmid = PoEqSolve(x2);
+	if (f * fmid >= 0.0)
+		nrerror("Root must be bracketed for bisection in rtbis");
+	rtb = f < 0.0 ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
+	for (j = 1; j <= JMAX; j++)
+	{
+		fmid = PoEqSolve(xmid = rtb + (dx *= 0.5));
+		if (fmid <= 0.0)
+			rtb = xmid;
+		if (fabs(dx) < xacc || fmid == 0.0)
+			return rtb;
+	}
+	nrerror("Too many bisections in rtbis");
+	return 0.0;
+}
+void KPad::rk4(float y[], float dydx[], int n, float x, float h, float yout[])
+{
+	float *vector(long, long);
+	void free_vector(float *, long, long);
+	int i;
+	float xh, hh, h6, *dym, *dyt, *yt;
+
+	dym = vector(1, n);
+	dyt = vector(1, n);
+	yt = vector(1, n);
+	hh = h * 0.5;
+	h6 = h / 6.0;
+	xh = x + hh;
+	for (i = 1; i <= n; i++)
+		yt[i] = y[i] + hh * dydx[i];
+	Derivs(xh, yt, dyt);
+	for (i = 1; i <= n; i++)
+		yt[i] = y[i] + hh * dyt[i];
+	Derivs(xh, yt, dym);
+	for (i = 1; i <= n; i++)
+	{
+		yt[i] = y[i] + h * dym[i];
+		dym[i] += dyt[i];
+	}
+	Derivs(x + h, yt, dyt);
+	for (i = 1; i <= n; i++)
+		yout[i] = y[i] + h6 * (dydx[i] + dyt[i] + 2.0 * dym[i]);
+	free_vector(yt, 1, n);
+	free_vector(dyt, 1, n);
+	free_vector(dym, 1, n);
+}
+
+void KPad::GetRamoField()
+{
+	Int_t i, j;
+	Double_t *x = new Double_t[nx * ny + 1];
+	for (j = 1; j <= ny; j++)
+		for (i = 1; i <= nx; i++)
+			x[i + (j - 1) * nx] = (Double_t)(j - 1) / (Double_t)(ny - 1);
+	Ramo->U = MapToGeometry(x);
+	Ramo->CalField();
+	delete[] x;
+}
+
+void KPad::GetField()
+{
+	Int_t i, j;
+	//Float_t Step=1;
+	Float_t aa;
+	PhyPot = TArrayF(ny + 2);
+	PhyField = TArrayF(ny + 2);
+	Double_t *x = new Double_t[nx * ny + 1];
+	//TArrayD PhyPot2D(nx*ny+1);
+	//TArrayI StripPosition=TArrayI(2); StripPosition[0]=1; StripPosition[1]=nx;
+
+	aa = rtbis(-100, 100, 0.000001);
+	//if(!Invert && GetDepletionVoltage()>Voltage) aa=rtbis(1,300,0.000001); else aa=rtbis(-10,10,0.000001);
+
+	for (j = 1; j <= ny; j++)
+		for (i = 1; i <= nx; i++)
+		{
+			x[i + (j - 1) * nx] = (Double_t)PhyPot[j - 1];
+		}
+	//Real=EField(PhyPot2D,nx,ny);
+	//Real->CalField(Step,1);
+
+	// for(i=0;i<nx*ny+1;i++)     {printf("%f ",PhyPot2D[i]); if(i%nx==0) printf("\n");}
+
+	Real->U = MapToGeometry(x);
+	Real->CalField();
+	delete[] x;
 }
 
 TGraph *KPad::DrawPad(char *option)
 {
   //Draws potential "p" or  electric field "f"
-Char_t Opt[10];
-TGraph *gr;
-TArrayF xx=TArrayF(ny+1);
- for(Int_t i=0;i<=ny;i++) xx[i]=(Float_t)i*GetStepSize(1,i);
+	Char_t Opt[10];
+	TGraph *gr;
+	TArrayF xx=TArrayF(ny+1);
+ 	for(Int_t i=0;i<=ny;i++) xx[i]=(Float_t)i*GetStepSize(1,i);
 
-if(strchr(option,'p')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyPot.GetArray());
-if(strchr(option,'f')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyField.GetArray());
-if(strchr(option,'s')!=NULL) sprintf(Opt,"CP"); else  sprintf(Opt,"ACP"); 
-//if(! strcmp(option,"p")) gr=new TGraph(ny,xx.GetArray(),PhyPot.GetArray());
-//if(! strcmp(option,"f")) gr=new TGraph(ny,xx.GetArray(),PhyField.GetArray());
-gr->Draw(Opt);
-gr->GetHistogram()->Draw();
-gr->Draw(Opt);
-return gr;
+	if(strchr(option,'p')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyPot.GetArray());
+	if(strchr(option,'f')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyField.GetArray());
+	if(strchr(option,'s')!=NULL) sprintf(Opt,"CP"); else  sprintf(Opt,"ACP"); 
+	//if(! strcmp(option,"p")) gr=new TGraph(ny,xx.GetArray(),PhyPot.GetArray());
+	//if(! strcmp(option,"f")) gr=new TGraph(ny,xx.GetArray(),PhyField.GetArray());
+	gr->Draw(Opt);
+	gr->GetHistogram()->Draw();
+	gr->Draw(Opt);
+	return gr;
 }
-
-
 
 
 void set_root_style(int stat=1110, int grid=0){
@@ -2649,8 +2805,8 @@ int main(int argc, char** argv) {
 			c3.cd();
 			// int number_pairs_si =76;	//silicon each um
 			// int number_pairs = 51;		//silicon carbide
-			//det->MipIR(1520);     // hole-electron paris of silicon
-			det->MipIR(1020);			 // hole-electron paris of silicon carbide
+			det->MipIR(1520);     // hole-electron paris of silicon
+			//det->MipIR(1020);			 // hole-electron paris of silicon carbide
 			det->sum->Draw("HIST");		 //total current
 			// det->neg->Draw("HIST same"); //electrons current
 			// det->pos->Draw("HIST same"); // hole current

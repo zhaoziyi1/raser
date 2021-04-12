@@ -25,8 +25,9 @@
 #include <TApplication.h> 
 #include <TMath.h> 
 #include <TLine.h> 
-#include <TVector3.h> 
-
+#include <TVector3.h>
+#include "TH1.h"
+#include "TRandom3.h"
 // KDetSim 
 
 // nrutil
@@ -363,6 +364,7 @@ public:
 	KMaterial() { Mat = 1; } // MobMod=1;}
 	~KMaterial(){};
 	static Float_t Perm(Int_t = 1);
+	static Float_t Loss_energy(Int_t = 1);
 	static Int_t MobMod();
 	// ClassDef(KMaterial, 1)
 };
@@ -379,11 +381,17 @@ Float_t KMaterial::Perm(Int_t Material)
 	switch (Material)
 	{
 	case 0:
-		perm = 11.7;
+		perm = 9.76;
 		break; //silicon
 	case 1:
-		perm = 11.7;
+		perm = 9.76;
 		break; //poly silicon
+	// case 0:
+	// 	perm = 11.7;
+	// 	break; //silicon
+	// case 1:
+	// 	perm = 11.7;
+	// 	break; //poly silicon
 	case 10:
 		perm = 5.7;
 		break; //diamond
@@ -398,6 +406,20 @@ Float_t KMaterial::Perm(Int_t Material)
 		break;
 	}
 	return perm;
+}
+Float_t KMaterial::Loss_energy(Int_t Material)
+{
+	Float_t loss_energy;
+	switch (Material)
+	{
+	case 0:
+		loss_energy = 3.6;
+		break; //silicon
+	case 1:
+		loss_energy = 8.4;
+		break; // silicon carbide
+	return loss_energy;
+}
 }
 
 Int_t KMaterial::MobMod()
@@ -488,7 +510,7 @@ void KStruct::GetCH(TH1F *histo, Int_t Update, Float_t Mult, Float_t tau)
 	Axis_t *ti = new Axis_t[Steps + 1]; // Changed when migrating from 2.23 to 2.25 or higher
 	for (i = 1; i < Steps + 1; i++)
 	{
-		ch[i] = Charge[i];
+		ch[i] = Charge[i]*e_0*1e15;
 		ti[i] = Time[i];
 	}								   // Changed when migrating from 2.23 to 2.25
 	his->FillN(Steps, &ti[1], &ch[1]); // Changed when migrating from 2.23 to 2.25
@@ -609,7 +631,7 @@ TH2F *KHisProject(void *hisIn,Int_t axis,Int_t Bin1)
 	for(i=0;i<=Nx;i++) 
 	{
 		Xbins[i]=his->GetXaxis()->GetBinLowEdge(i+1);
-		//   printf("x:: %d %f\n",i,Xbins[i]);
+		   //printf("x:: %d %f\n",i,Xbins[i]);
 	}
 	for(i=0;i<=Ny;i++) 
 	{
@@ -1157,11 +1179,16 @@ Int_t KField::CalField()
 					for(q=0;q<=2;q++) 
 					{
 						X[q]=U->GetYaxis()->GetBinCenter(j+q-1);
+						
 						Y[q]=U->GetBinContent(i,j+q-1,k);
-					}
 
+					}
+					//std::cout << "i:" << i << "j:" << j << "k:" << k << std::endl;
+					//std::cout << "X[0]:" << X[0] << "X[1]:" << X[1] << "X[2]:" << X[2] << std::endl;
+					//std::cout << "Y[0]:" << Y[0] << "Y[1]:" << Y[1] << "Y[2]:" << Y[2] << std::endl;
 
 					Ey->SetBinContent(i,j,k,GetFieldPoint(X,Y));
+					// std::cout << GetFieldPoint(X, Y) << std::endl;
 				}
 				// Get Z field
 				if(k==1 || k==nz) Ez->SetBinContent(i,j,k,0); else 
@@ -1175,6 +1202,8 @@ Int_t KField::CalField()
 				}
 
 				EE=TMath::Sqrt(TMath::Power(Ex->GetBinContent(i,j,k),2)+TMath::Power(Ey->GetBinContent(i,j,k),2)+TMath::Power(Ez->GetBinContent(i,j,k),2));
+				//std::cout << "i:" << i << "j:" << j << "k:" << k << std::endl;
+				//std::cout << "EX:"<<Ex->GetBinContent(i,j,k)<<",Ey:"<<Ey->GetBinContent(i,j,k)<<",EE:" <<EE<< std::endl;
 				E->SetBinContent(i,j,k,EE);
 
 			}
@@ -1184,11 +1213,13 @@ Int_t KField::CalField()
 
 Float_t KField::GetFieldPoint(Float_t *X, Float_t *Y)
 {
+	//electric potential to field
 	Float_t a,b,k12,k23;
 	k12=(Y[0]-Y[1])/(X[0]-X[1]);
 	k23=(Y[1]-Y[2])/(X[1]-X[2]);
 	a=(k23-k12)/(X[2]-X[0]);
 	b=k12-a*(X[0]+X[1]);
+	//std::cout<< "b:" <<b<<"field:"<<2*a*X[1]+b<<std::endl;
 	return 2*a*X[1]+b;
 }
 
@@ -1228,7 +1259,7 @@ void KField::CalFieldXYZ(Float_t x, Float_t y, Float_t z, TVector3 *vec)
 
 Double_t KField::DriftVelocity(Float_t E,Float_t Charg, Float_t T, Double_t Neff, Int_t which)
 {
-	E*=1e4;
+	E*=1e4;//um->cm
 	return(Mobility(E,T,Charg,Neff,which)*(Double_t)E);
 }
 
@@ -1260,7 +1291,7 @@ Double_t KField::Mobility(Float_t E,Float_t T,Float_t Charg,Double_t Neff, Int_t
 	Double_t vsatn,vsatp,vsat;
 	Double_t betap,betan;
 	Double_t alpha;
-
+	//std::cout<<"mobility choose:"<<which<<std::endl;
 	switch(which)
 	{
 		case 0:
@@ -1280,29 +1311,56 @@ Double_t KField::Mobility(Float_t E,Float_t T,Float_t Charg,Double_t Neff, Int_t
 				hfm=lfm/TMath::Power(1+TMath::Power(lfm*E/vsatn,1/betan),betan);
 			}
 			break;
-		case 1:       
-			alpha=0.72*TMath::Power(T/300,0.065);
-			if(Charg>0)
+		//silicon carbide
+		case 1:
+			if (Charg > 0)
 			{
-				Double_t ulp=460*TMath::Power(T/300,-2.18);
-				Double_t uminp=45*TMath::Power(T/300,-0.45);      
-				Double_t Crefp=2.23e17*TMath::Power(T/300,3.2);
-				betap=1;
-				vsatp=9.05e6*TMath::Sqrt(TMath::TanH(312/T));
-				lfm=uminp+(ulp-uminp)/(1+TMath::Power(Neff/Crefp,alpha));
-				hfm=2*lfm/(1+TMath::Power(1+TMath::Power(2*lfm*E/vsatp,betap),1/betap));
+				// unit cm
+				alpha = 0.34;
+				Double_t ulp = 125 * TMath::Power(T / 300, -2.15);
+				Double_t uminp = 15.9 * TMath::Power(T / 300, -0.5);
+				Double_t Crefp = 1.76e19;
+				betap = 1.2 * TMath::Power(T / 300, 1.0);
+				vsatp = 2.2e7 * TMath::Power(T / 300, -0.44);
+				lfm = uminp + (ulp - uminp) / (1 + TMath::Power(Neff / Crefp, alpha));
+				hfm = lfm / (TMath::Power(1 + TMath::Power(lfm * E / vsatp, betap), 1 / betap));
 			}
 			else
 			{
-				Double_t uln=1430*TMath::Power(T/300,-2); 
-				Double_t uminn=80*TMath::Power(T/300,-0.45);
-				Double_t Crefn=1.12e17*TMath::Power(T/300,3.2);
-				betan=2;      
-				vsatn=1.45e7*TMath::Sqrt(TMath::TanH(155/T));
-				lfm=uminn+(uln-uminn)/(1+TMath::Power(Neff/Crefn,alpha));
-				hfm=2*lfm/(1+TMath::Power(1+TMath::Power(2*lfm*E/vsatn,betan),1/betan));
+				alpha = 0.61;
+				Double_t ulp = 950 * TMath::Power(T / 300, -2.40);
+				Double_t uminp = 40.0 * TMath::Power(T / 300, -0.5);
+				Double_t Crefp = 1.94e17;
+				betap = 1.2 * TMath::Power(T / 300, 1.0);
+				vsatp = 2.2e7 * TMath::Power(T / 300, -0.44);
+				lfm = uminp + (ulp - uminp) / (1 + TMath::Power(Neff / Crefp, alpha));
+				hfm = lfm / (TMath::Power(1 + TMath::Power(lfm * E / vsatp, betap), 1 / betap));
 			}
 			break;
+		//silicon
+		// case 1:       
+		// 	alpha=0.72*TMath::Power(T/300,0.065);
+		// 	if(Charg>0)
+		// 	{
+		// 		Double_t ulp=460*TMath::Power(T/300,-2.18);
+		// 		Double_t uminp=45*TMath::Power(T/300,-0.45);      
+		// 		Double_t Crefp=2.23e17*TMath::Power(T/300,3.2);
+		// 		betap=1;
+		// 		vsatp=9.05e6*TMath::Sqrt(TMath::TanH(312/T));
+		// 		lfm=uminp+(ulp-uminp)/(1+TMath::Power(Neff/Crefp,alpha));
+		// 		hfm=2*lfm/(1+TMath::Power(1+TMath::Power(2*lfm*E/vsatp,betap),1/betap));
+		// 	}
+		// 	else
+		// 	{
+		// 		Double_t uln=1430*TMath::Power(T/300,-2); 
+		// 		Double_t uminn=80*TMath::Power(T/300,-0.45);
+		// 		Double_t Crefn=1.12e17*TMath::Power(T/300,3.2);
+		// 		betan=2;      
+		// 		vsatn=1.45e7*TMath::Sqrt(TMath::TanH(155/T));
+		// 		lfm=uminn+(uln-uminn)/(1+TMath::Power(Neff/Crefn,alpha));
+		// 		hfm=2*lfm/(1+TMath::Power(1+TMath::Power(2*lfm*E/vsatn,betan),1/betan));
+		// 	}
+		// 	break;
  
 		case 2:   // WF2
 			if(Charg>0)
@@ -1439,7 +1497,7 @@ class KDetector : public KGeometry, public KMaterial {
 		TH1F *pos;           // contribution of the holes to the total drift current
 		TH1F *neg;           // contribution of the electrons  to the total drift current
 		TH1F *sum;	       // total drift current
-
+		TH1F *pairs;		// e-h pairs each micros
 		// Constructors and destructor
 		KDetector();
 		~KDetector();
@@ -1455,7 +1513,8 @@ class KDetector : public KGeometry, public KMaterial {
 		void ShowUserIonization(Int_t, Float_t *, Float_t *, Float_t *, Float_t *, Int_t=14, Int_t=1);
 		void MipIR(Int_t = 20, Float_t = 0);
 		void Drift(Double_t, Double_t, Double_t, Float_t, KStruct *, Double_t = 0);
-
+  		void SetEntryPoint(Float_t x, Float_t y, Float_t z) {enp[0]=x; enp[1]=y; enp[2]=z;};
+  		void SetExitPoint(Float_t x, Float_t y, Float_t z) {exp[0]=x; exp[1]=y; exp[2]=z;};
 
 
 		//Configuration functions 
@@ -1515,14 +1574,16 @@ void KDetector::SetDriftHisto(Float_t x, Int_t numbins)
 		neg  = new TH1F("charge-","Negative Charge",numbins,0,x); 	
 		if(sum!=NULL) delete sum;
 		sum  = new TH1F("charge","Total Charge",numbins,0,x); 
-
-		sum->SetXTitle("t [s]");  neg->SetXTitle("t [s]"); pos->SetXTitle("t [s]");
-		sum->SetYTitle("I [arb.]");neg->SetYTitle("I [arb.]");pos->SetYTitle("I [arb.]");
+		if(pairs!=NULL) delete pairs;
+		pairs = new TH1F("pairs", "pairs", numbins/5, 0, 150);
+		sum->SetXTitle("t [s]");  neg->SetXTitle("t [s]"); pos->SetXTitle("t [s]"); pairs->SetXTitle("e-h pairs/um");
+		sum->SetYTitle("I [arb.]");neg->SetYTitle("I [arb.]");pos->SetYTitle("I [arb.]"); pairs->SetXTitle("events");
 		sum->GetYaxis()->SetTitleOffset(1.4); neg->GetYaxis()->SetTitleOffset(1.4); pos->GetYaxis()->SetTitleOffset(1.4);
+		pairs->GetYaxis()->SetTitleOffset(1.4);
 		pos->SetLineColor(2);
 		neg->SetLineColor(4);
-		sum->SetLineColor(1);	
-
+		sum->SetLineColor(1);
+		pairs->SetLineColor(6);
 	}
 }
 
@@ -1544,14 +1605,14 @@ KDetector::KDetector()
 	for(Int_t i=0;i<3;i++) B[i]=0;
 
 	// setting up default random generator - diffusion
-	ran=new TRandom(33);  
+	ran=new TRandom3(0);  
 
 	// Calculation parameters
 	CalErr=1e-6;
 	MaxIter=2000;
 
 	// histograms for storing the drift
-	pos=NULL; neg=NULL; sum=NULL;
+	pos=NULL; neg=NULL; sum=NULL; pairs=NULL;
 	SetDriftHisto(25e-9);
 
 	// setting up general variables
@@ -1591,6 +1652,7 @@ KDetector::~KDetector()
 	if(NeffH!=NULL) delete NeffH;
 	if(ran!=NULL) delete ran;
 	if(pos!=NULL) delete pos;
+	if(pairs!=NULL) delete pairs;
 	if(neg!=NULL) delete neg;
 	if(sum!=NULL) delete sum;
 
@@ -1933,20 +1995,31 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 	//	Float_t B; magnetic field
 
 	Double_t data[4];
-	Float_t sp[3];
+	Float_t sp[3],sp_2[3];
+	Float_t drift_d; //drift distance each bucket
+	Int_t n_pairs;
+	Double_t loss_energy;
 	Float_t Io, len = 0, lent = 0, lenlam, scalef = 0, pscalef = 0, mule, mulh;
-	int i, j, k, e;
+	int i, j, k, e,mm;
 	KStruct seg, segmul;
-
+	// silicon
+		
+	if (Perm(0)== Float_t(9.76) ) loss_energy=Loss_energy(1);
+	if (Perm(0) == Float_t(11.7) ) loss_energy = Loss_energy(0);
+		//std::cout << "loss_energy:" << loss_energy << std::endl;
 	TH1F *histop = new TH1F("ch-", "charge+", pos->GetNbinsX(), pos->GetXaxis()->GetXmin(), pos->GetXaxis()->GetXmax()); //2.23 -> 3.0
 	TH1F *histon = new TH1F("ch+", "charge-", neg->GetNbinsX(), neg->GetXaxis()->GetXmin(), neg->GetXaxis()->GetXmax());
 	sum->Reset();
 	pos->Reset();
 	neg->Reset();
+	pairs->Reset();
 
 	/////////////////////////////////////////////////////////////////
 	// If there is no attenuation coefficient we consider that as mip
 	/////////////////////////////////////////////////////////////////
+	TFile Myf("Geant_Vin.root");
+	TH1F *EDist;
+	EDist = (TH1F *)Myf.Get("Silicon_Vin");
 
 	if (lambda != 0)
 	{
@@ -1956,77 +2029,94 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 		lenlam = lent / lambda;
 		Io = div / (lambda * (1 - TMath::Exp(-lenlam)));
 
-		//     if(Debug)
-		//  printf("Calculated length=%f um, lenDIVlamda=%f, I0=%f \n", lent,lenlam,Io );
+			//     if(Debug)
+			//  printf("Calculated length=%f um, lenDIVlamda=%f, I0=%f \n", lent,lenlam,Io );
 	}
 	/////////////////////////////////////////////////////////////////
 
-	for (i = 0; i < div; i++)
+	for (i = 0; i < div-1; i++)
 	{
 		for (j = 0; j < 3; j++)
 		{
 			sp[j] = ((exp[j] - enp[j]) / div) * i + enp[j] + (exp[j] - enp[j]) / (2 * div);
 		}
-		//     printf("#i=%d div=%d, pointx=%f, pointy=%f pointz=%f \n",i,div,sp[0],sp[1],sp[2]);
-		for (j = 0; j < average; j++)
+		for (j = 0; j < 3; j++)
 		{
-
-			Drift(sp[0], sp[1], sp[2], 1, &seg);
-			seg.GetCH(histop, 1, 1, tauh);
-			Drift(sp[0], sp[1], sp[2], -1, &seg);
-
-			if (MTresh > 1)
+			sp_2[j] = ((exp[j] - enp[j]) / div) * (i+1) + enp[j] + (exp[j] - enp[j]) / (2 * div);
+		}
+		//     printf("#i=%d div=%d, pointx=%f, pointy=%f pointz=%f \n",i,div,sp[0],sp[1],sp[2]);
+		drift_d = TMath::Sqrt(TMath::Power(sp_2[0]-sp[0], 2) + TMath::Power(sp_2[1]-sp[1], 2)+ TMath::Power(sp_2[2]-sp[2], 2));
+		gRandom = new TRandom3(0);
+		float ran_pairs = EDist->GetRandom();
+		n_pairs =(int) round(drift_d*ran_pairs*1e6/(5*loss_energy)*1.582);
+		//1.582 is change silicon loss energy to silicon carbide 
+		// if (i<10) std::cout<<"drift_d:"<<drift_d<<std::endl;
+		// if (i<10) std::cout<<"loss_energy:"<<loss_energy<<std::endl;
+		// if (i<10) std::cout<<"n_pairs:"<<n_pairs<<std::endl;
+		for (mm = 0; mm<n_pairs;mm++)
+		{
+			//if (mm==0) std::cout<<"n_pairs:"<<n_pairs<<std::endl;
+			for (j = 0; j < average; j++)
 			{
-				mule = seg.GetCHMult(histon, 1, 1, taue); // performing multiplication
-				//      if(Debug)  printf(":: Mstep = %f ::",mule);
-			}
-			else
-				seg.GetCH(histon, 1, 1, taue);
 
-			if (mule > MTresh && MTresh > 1) //if the multiplication is large enough then do the hole tracking
-			{
-				for (e = 1; e < seg.Steps + 1; e++)
+				Drift(sp[0], sp[1], sp[2], 1, &seg);
+				seg.GetCH(histop, 1, 1, tauh);
+				Drift(sp[0], sp[1], sp[2], -1, &seg);
+
+				if (MTresh > 1)
 				{
-					Drift(seg.Xtrack[e], seg.Ytrack[e], seg.Ztrack[e], 1, &segmul, seg.Time[e]);
-					mulh = segmul.GetCHMult(histop, 1, seg.MulCar[e], tauh);
-					if (mulh > BDTresh && Debug)
+					mule = seg.GetCHMult(histon, 1, 1, taue); // performing multiplication
+															  //      if(Debug)  printf(":: Mstep = %f ::",mule);
+				}
+				else
+					seg.GetCH(histon, 1, 1, taue);
+
+				if (mule > MTresh && MTresh > 1) //if the multiplication is large enough then do the hole tracking
+				{
+					for (e = 1; e < seg.Steps + 1; e++)
 					{
-						printf("HOLE MULTIPLICATION - BREAKDOWN\n");
-						BreakDown = 1;
+						Drift(seg.Xtrack[e], seg.Ytrack[e], seg.Ztrack[e], 1, &segmul, seg.Time[e]);
+						mulh = segmul.GetCHMult(histop, 1, seg.MulCar[e], tauh);
+						if (mulh > BDTresh && Debug)
+						{
+							printf("HOLE MULTIPLICATION - BREAKDOWN\n");
+							BreakDown = 1;
+						}
 					}
 				}
 			}
-		}
 
-		histop->Scale(1 / ((Float_t)average));
-		histon->Scale(1 / ((Float_t)average));
+			histop->Scale(1 / ((Float_t)average));
+			histon->Scale(1 / ((Float_t)average));
 
 		///////////////////////////////////////////////////////////////////
 		// If there is no attenuation coefficient we consider that as mip//
 		// Changes made by GK 3.3.2020                                 ////
 		///////////////////////////////////////////////////////////////////
-		if (lambda != 0)
-		{
-			len = 0;
-			for (k = 0; k < 3; k++)
-				len += TMath::Power(sp[k] - enp[k], 2);
-			len = TMath::Sqrt(len);
-			scalef = Io * TMath::Exp(-len / lambda) * SStep;
-			//printf("step=%d ::  len=%f um, scalef=%f pscalef=%f\n",i,len,scalef,pscalef);
-			histon->Scale(scalef);
-			histop->Scale(scalef);
-			pscalef += scalef;
-			histop->Scale(lent / div);
-			histon->Scale(lent / div);
-		}
+			if (lambda != 0)
+			{
+				len = 0;
+				for (k = 0; k < 3; k++)
+					len += TMath::Power(sp[k] - enp[k], 2);
+				len = TMath::Sqrt(len);
+				scalef = Io * TMath::Exp(-len / lambda) * SStep;
+				//printf("step=%d ::  len=%f um, scalef=%f pscalef=%f\n",i,len,scalef,pscalef);
+				histon->Scale(scalef);
+				histop->Scale(scalef);
+				pscalef += scalef;
+				histop->Scale(lent / div);
+				histon->Scale(lent / div);
+			}
 		/////////////////////////////////////////////////////////////////////////////////
-
-		pos->Add(histop);
-		neg->Add(histon);
-		histop->Reset();
-		histon->Reset();
+			
+			pos->Add(histop);
+			neg->Add(histon);
+			histop->Reset();
+			histon->Reset();
+		}
+		pairs->Fill(ran_pairs*1e6/(5*loss_energy)*1.582);
 	}
-
+	
 	sum->Add(neg);
 	sum->Add(pos);
 
@@ -2121,9 +2211,8 @@ void KDetector::Drift(Double_t sx, Double_t sy, Double_t sz, Float_t charg, KStr
 		if(DM!=NULL)
 			KMaterial::Mat=DM->GetBinContent(DM->FindBin(cx,cy,cz)); 
 		else KMaterial::Mat=0;
-
-		//      EEN=Real->CalFieldXYZ(cx+deltacx,cy+deltacy,cz+deltacz); // get field & velocity at new location //12.9.2018
-		Real->CalFieldXYZ(cx+deltacx,cy+deltacy,cz+deltacz,EEN); // get field & velocity at new location
+						 //      EEN=Real->CalFieldXYZ(cx+deltacx,cy+deltacy,cz+deltacz); // get field & velocity at new location //12.9.2018
+		Real->CalFieldXYZ(cx + deltacx, cy + deltacy, cz + deltacz, EEN); // get field & velocity at new location
 		vel=Real->DriftVelocity( (EEN->Mag()+EE->Mag())/2,charg,Temperature,TMath::Abs(NeffF->Eval(cx,cy,cz)),MobMod());
 
 		//printf("Calculate vel: %e EEN = %e ::: ",vel, EEN->Mag());
@@ -2226,18 +2315,17 @@ void KDetector::Drift(Double_t sx, Double_t sy, Double_t sz, Float_t charg, KStr
 
 
 
-// K3D 
+// K3D
 
-
+#include "Rtypes.h"
 #include "TArray.h"
 #include "TArrayI.h"
 #include "TArrayF.h"
 #include "TGraph.h"
 #include <stdio.h>
 #include <stdlib.h>
-//#include "KStruct.h"
 #include "TMinuit.h"
-// #include "KDetector.h"
+
 
 
 class K3D : public KDetector
@@ -2423,18 +2511,22 @@ Float_t KPad::PoEqSolve(Float_t der)
 	y[2] = der;
 	PhyField[0] = y[2];
 	PhyPot[0] = y[1];
+	
 	Derivs(x, y, dydx);
+	
 	for (i = 1; i <= ny; i++)
 	{
 		h = GetStepSize(1, i);
 		rk4(y, dydx, 2, x, h, yout);
 		//printf("%f %f %f\n",x+h,yout[1],yout[2]);
-		y[1] = yout[1];
-		y[2] = yout[2];
+		y[1] = yout[1]; //electric potential
+		y[2] = yout[2];	// electric filed
 		PhyField[i] = y[2];
 		PhyPot[i] = y[1];
+		//std::cout << "x:" << x << ",y[x]:" << y[1] << "," << y[2] << std::endl;
 		x = x + h;
 		Derivs(x, y, dydx);
+		
 	}
 	//     printf("y[1]=%f\n",xp1);
 	return y[1];
@@ -2464,8 +2556,8 @@ void KPad::SetUpElectrodes()
  	for(int i=1;i<=nx;i++){ EG->SetBinContent(i,1,1,2);  EG->SetBinContent(i,ny,1,16385);} 
  	// KMaterial::Mat=10;
   	//Default track
- 	enp[0]=CellX/2;  exp[0]=enp[0];
- 	enp[1]=1;        exp[1]=CellY;
+ 	// enp[0]=CellX/2;  exp[0]=enp[0];
+ 	// enp[1]=1;        exp[1]=CellY;
 
  	if(Neff!=NULL )
  	{
@@ -2490,7 +2582,9 @@ Float_t KPad::rtbis(float x1, float x2, float xacc)
 	rtb = f < 0.0 ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
 	for (j = 1; j <= JMAX; j++)
 	{
+		//xmid find a good electric field intial value
 		fmid = PoEqSolve(xmid = rtb + (dx *= 0.5));
+		// fmid is the electric field at the readout electrodes
 		if (fmid <= 0.0)
 			rtb = xmid;
 		if (fabs(dx) < xacc || fmid == 0.0)
@@ -2536,8 +2630,13 @@ void KPad::GetRamoField()
 	Int_t i, j;
 	Double_t *x = new Double_t[nx * ny + 1];
 	for (j = 1; j <= ny; j++)
+	{
 		for (i = 1; i <= nx; i++)
+		{
 			x[i + (j - 1) * nx] = (Double_t)(j - 1) / (Double_t)(ny - 1);
+			
+		}
+	}
 	Ramo->U = MapToGeometry(x);
 	Ramo->CalField();
 	delete[] x;
@@ -2761,7 +2860,7 @@ int main(int argc, char** argv) {
 			K3D *det = new K3D(7, 80, 80, 300);
 			det->Voltage = 50;
 			// define the drift mesh size and simulation mesh size in microns
-			det->SetUpVolume(1, 4);
+			det->SetUpVolume(0.1, 1);
 			// define  columns #, postions, weigthing factor 2=0 , material Al=1
 			det->SetUpColumn(0, 40, 15, 4, 280, 2, 1);
 			det->SetUpColumn(1, 40, 65, 4, 280, 2, 1);
@@ -2771,7 +2870,7 @@ int main(int argc, char** argv) {
 			det->SetUpColumn(5, 18.35, 52.5, 4, 280, 2, 1);
 			det->SetUpColumn(6, 40, 40, 4, -280, 16385, 1);
 			det->Temperature = 300;
-			det->SetDriftHisto(1.2e-9, 36);
+			
 			// Float_t Pos[3] = {80, 80, 1};
 			// Float_t Size[3] = {80, 80, 2};
 			// det->ElRectangle(Pos, Size, 0, 20); ///how to use?
@@ -2800,7 +2899,7 @@ int main(int argc, char** argv) {
 			// Show mip track
 			TCanvas c1;
 			c1.cd();
-			det->ShowMipIR(150);
+			det->ShowMipIR(30);
 			TCanvas c3;
 			c3.cd();
 			// int number_pairs_si =76;	//silicon each um
@@ -2817,13 +2916,82 @@ int main(int argc, char** argv) {
 		if (!strcmp(argv[i], "2D"))
 		{
 			TF1 *neff = new TF1("neff", "[0]+x[0]*0", 0, 1000);
-			neff->SetParameter(0, 0.2);
-			KPad det(50, 300);
+			neff->SetParameter(0, 10);
+			KPad det(1000,100);
 			det.Neff = neff;
-			det.Voltage = -200;
+			det.SetDriftHisto(10e-9, 100);
+			det.Voltage = -500;
 			det.SetUpVolume(1);
+			det.SetEntryPoint(1000, 0, 0.5); //set entry point of the track
+			det.SetExitPoint(1000, 100, 0.5);
 			det.SetUpElectrodes();
-			det.DrawPad("f");
+			det.SStep = 0.1; // set the drift step of e-h pairs
+			det.Temperature = 300; // set the operation temperature
+			
+ 			//set exit point of the track
+			// switch on the diffusion
+			det.diff = 1;
+			// MIP non-uniform charge deposition
+			
+
+
+			// TGraph *ElField;						  // electric field
+			// TGraph *ElPotential;					  // electric potential					  // doping profile
+
+			// // // Show mip track
+			// TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
+			// c2.Divide(2, 3);						  //divide canvas
+			// //electic field
+			// c2.cd(1);
+			// ElField = det.DrawPad("f");
+			// ElField->SetTitle("Electric field");
+			// ElField->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			// ElField->GetYaxis()->SetTitle("E [V/#mum]");
+			// //electric potential  or weighting potential ???
+			// c2.cd(2);
+			// ElPotential=det.DrawPad("p");
+			// ElPotential->SetTitle("Electric Potential");
+			// ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			// ElPotential->GetYaxis()->SetTitle("U [V]");
+
+			// // //doping distribution
+			// c2.cd(3);
+			// TF1 *neffGc;
+			// neffGc = neff->DrawCopy();
+			// neffGc->SetRange(0, 21);
+			// neffGc->SetTitle("Doping profile (full detector)");
+			// neffGc->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			// neffGc->GetYaxis()->SetTitle("N_{eff} [10^{12} cm^{-3}]");
+			// neffGc->GetYaxis()->SetTitleOffset(1.5);
+			// //induced current
+			// c2.cd(4);
+			// det.MipIR(50);
+			// det.sum->SetLineColor(1);
+			// det.neg->SetLineColor(4);
+			// det.pos->SetLineColor(2);
+			// det.sum->Draw("HIST");		//plot total induced current
+			// det.neg->Draw("SAME HIST"); //plot electrons' induced current
+			// det.pos->Draw("SAME HIST"); //plot holes' induced current
+			// auto legend = new TLegend(0.7, 0.4, 0.9, 0.6);
+			// legend->AddEntry(det.sum, "sum", "l");
+			// legend->AddEntry(det.neg, "electron", "l");
+			// legend->AddEntry(det.pos, "hole", "l");
+			// legend->SetBorderSize(0);
+			// legend->Draw();
+			// //charge drift
+			// c2.cd(5);
+			// det.ShowMipIR(150);
+			// c2.cd(6);
+			// det.MipIR(5100);
+			//det.pairs->Draw("HIST");
+
+			TCanvas c3("Plots", "Plots", 1000, 1000);
+			//MiPIR(precision) 
+			det.MipIR(5100);
+			det.sum->Draw("HIST");
+			//det.pairs->Draw("HIST");
+			//c3.SaveAs("txt/SiC_NJU_waveform.txt");
+
 			theApp.Run();
 		} // End "2D"
 	}

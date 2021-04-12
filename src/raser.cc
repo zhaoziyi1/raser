@@ -2922,8 +2922,8 @@ int main(int argc, char** argv) {
 			det.SetDriftHisto(10e-9, 100);
 			det.Voltage = -500;
 			det.SetUpVolume(1);
-			det.SetEntryPoint(1000, 0, 0.5); //set entry point of the track
-			det.SetExitPoint(1000, 100, 0.5);
+			det.SetEntryPoint(500, 0, 0.5); //set entry point of the track
+			det.SetExitPoint(500, 100, 0.5);
 			det.SetUpElectrodes();
 			det.SStep = 0.1; // set the drift step of e-h pairs
 			det.Temperature = 300; // set the operation temperature
@@ -2935,62 +2935,69 @@ int main(int argc, char** argv) {
 			
 
 
-			// TGraph *ElField;						  // electric field
-			// TGraph *ElPotential;					  // electric potential					  // doping profile
+			TGraph *ElField;						  // electric field
+			TGraph *ElPotential;					  // electric potential					  // doping profile
 
-			// // // Show mip track
-			// TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
-			// c2.Divide(2, 3);						  //divide canvas
-			// //electic field
-			// c2.cd(1);
-			// ElField = det.DrawPad("f");
-			// ElField->SetTitle("Electric field");
-			// ElField->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
-			// ElField->GetYaxis()->SetTitle("E [V/#mum]");
-			// //electric potential  or weighting potential ???
-			// c2.cd(2);
-			// ElPotential=det.DrawPad("p");
-			// ElPotential->SetTitle("Electric Potential");
-			// ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
-			// ElPotential->GetYaxis()->SetTitle("U [V]");
+			// // Show mip track
+			TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
+			c2.Divide(2, 3);						  //divide canvas
+			//electic field
+			c2.cd(1);
+			ElField = det.DrawPad("f");
+			ElField->SetTitle("Electric field");
+			ElField->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			ElField->GetYaxis()->SetTitle("E [V/#mum]");
+			//electric potential  or weighting potential ???
+			c2.cd(2);
+			ElPotential=det.DrawPad("p");
+			ElPotential->SetTitle("Electric Potential");
+			ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			ElPotential->GetYaxis()->SetTitle("U [V]");
 
-			// // //doping distribution
-			// c2.cd(3);
-			// TF1 *neffGc;
-			// neffGc = neff->DrawCopy();
-			// neffGc->SetRange(0, 21);
-			// neffGc->SetTitle("Doping profile (full detector)");
-			// neffGc->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
-			// neffGc->GetYaxis()->SetTitle("N_{eff} [10^{12} cm^{-3}]");
-			// neffGc->GetYaxis()->SetTitleOffset(1.5);
-			// //induced current
-			// c2.cd(4);
-			// det.MipIR(50);
-			// det.sum->SetLineColor(1);
-			// det.neg->SetLineColor(4);
-			// det.pos->SetLineColor(2);
-			// det.sum->Draw("HIST");		//plot total induced current
-			// det.neg->Draw("SAME HIST"); //plot electrons' induced current
-			// det.pos->Draw("SAME HIST"); //plot holes' induced current
-			// auto legend = new TLegend(0.7, 0.4, 0.9, 0.6);
-			// legend->AddEntry(det.sum, "sum", "l");
-			// legend->AddEntry(det.neg, "electron", "l");
-			// legend->AddEntry(det.pos, "hole", "l");
-			// legend->SetBorderSize(0);
-			// legend->Draw();
-			// //charge drift
-			// c2.cd(5);
-			// det.ShowMipIR(150);
-			// c2.cd(6);
-			// det.MipIR(5100);
-			//det.pairs->Draw("HIST");
-
-			TCanvas c3("Plots", "Plots", 1000, 1000);
-			//MiPIR(precision) 
+			// //doping distribution
+			c2.cd(3);
+			TF1 *neffGc;
+			neffGc = neff->DrawCopy();
+			neffGc->SetRange(0, 21);
+			neffGc->SetTitle("Doping profile (full detector)");
+			neffGc->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			neffGc->GetYaxis()->SetTitle("N_{eff} [10^{12} cm^{-3}]");
+			neffGc->GetYaxis()->SetTitleOffset(1.5);
+			//induced current
+			c2.cd(4);
+			det.MipIR(50);
+			det.sum->SetLineColor(1);
+			det.neg->SetLineColor(4);
+			det.pos->SetLineColor(2);
+			det.sum->Draw("HIST");		//plot total induced current
+			det.neg->Draw("SAME HIST"); //plot electrons' induced current
+			det.pos->Draw("SAME HIST"); //plot holes' induced current
+			auto legend = new TLegend(0.7, 0.4, 0.9, 0.6);
+			legend->AddEntry(det.sum, "sum", "l");
+			legend->AddEntry(det.neg, "electron", "l");
+			legend->AddEntry(det.pos, "hole", "l");
+			legend->SetBorderSize(0);
+			legend->Draw();
+			//charge drift
+			c2.cd(5);
+			det.ShowMipIR(150);
+			c2.cd(6);
 			det.MipIR(5100);
-			det.sum->Draw("HIST");
-			//det.pairs->Draw("HIST");
-			//c3.SaveAs("txt/SiC_NJU_waveform.txt");
+			det.pairs->Draw("HIST");
+
+			// TCanvas c3("Plots", "Plots", 1000, 1000);
+			// //MiPIR(precision) 
+			// det.MipIR(5100);
+			
+			// //det.pairs->Draw("HIST");
+			// //c3.SaveAs("txt/SiC_NJU_waveform.txt");
+			// KElec tct;
+			// tct.preamp(det.sum);
+			// tct.CRshape(40e-12, 50, 10000, det.sum);
+			// tct.RCshape(40e-12, 50, 10000, det.sum);
+			// tct.RCshape(40e-12, 50, 10000, det.sum);
+			// tct.RCshape(40e-12, 50, 10000, det.sum);
+			// det.sum->Draw();
 
 			theApp.Run();
 		} // End "2D"

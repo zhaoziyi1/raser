@@ -510,7 +510,7 @@ void KStruct::GetCH(TH1F *histo, Int_t Update, Float_t Mult, Float_t tau)
 	Axis_t *ti = new Axis_t[Steps + 1]; // Changed when migrating from 2.23 to 2.25 or higher
 	for (i = 1; i < Steps + 1; i++)
 	{
-		ch[i] = Charge[i]*e_0*1e15;
+		ch[i] = Charge[i];
 		ti[i] = Time[i];
 	}								   // Changed when migrating from 2.23 to 2.25
 	his->FillN(Steps, &ti[1], &ch[1]); // Changed when migrating from 2.23 to 2.25
@@ -1317,24 +1317,24 @@ Double_t KField::Mobility(Float_t E,Float_t T,Float_t Charg,Double_t Neff, Int_t
 			{
 				// unit cm
 				alpha = 0.34;
-				Double_t ulp = 125 * TMath::Power(T / 300, -2.15);
-				Double_t uminp = 15.9 * TMath::Power(T / 300, -0.5);
+				Double_t ulp = 124 * TMath::Power(T / 300, -2);
+				Double_t uminp = 15.9;
 				Double_t Crefp = 1.76e19;
-				betap = 1.2 * TMath::Power(T / 300, 1.0);
-				vsatp = 2.2e7 * TMath::Power(T / 300, -0.44);
-				lfm = uminp + (ulp - uminp) / (1 + TMath::Power(Neff / Crefp, alpha));
+				betap = 1.213 * TMath::Power(T / 300, 0.17);
+				vsatp = 2e7 * TMath::Power(T / 300, 0.52);
+				lfm = uminp + ulp/ (1 + TMath::Power(Neff / Crefp, alpha));
 				hfm = lfm / (TMath::Power(1 + TMath::Power(lfm * E / vsatp, betap), 1 / betap));
 			}
 			else
 			{
 				alpha = 0.61;
-				Double_t ulp = 950 * TMath::Power(T / 300, -2.40);
+				Double_t ulp = 947 * TMath::Power(T / 300, -2);
 				Double_t uminp = 40.0 * TMath::Power(T / 300, -0.5);
-				Double_t Crefp = 1.94e17;
-				betap = 1.2 * TMath::Power(T / 300, 1.0);
-				vsatp = 2.2e7 * TMath::Power(T / 300, -0.44);
-				lfm = uminp + (ulp - uminp) / (1 + TMath::Power(Neff / Crefp, alpha));
-				hfm = lfm / (TMath::Power(1 + TMath::Power(lfm * E / vsatp, betap), 1 / betap));
+				Double_t Crefp = 1.94e19;
+				betap = 1 * TMath::Power(T / 300, 0.66);
+				vsatp = 2e7 * TMath::Power(T / 300, 0.87);
+				lfm = ulp/ (1 + TMath::Power(Neff / Crefp, alpha));
+				hfm = lfm / (TMath::Power(1 + TMath::Power(lfm * E / vsatp, betap), 1/betap));
 			}
 			break;
 		//silicon
@@ -2114,7 +2114,7 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 			histop->Reset();
 			histon->Reset();
 		}
-		pairs->Fill(ran_pairs*1e6/(5*loss_energy)*1.582);
+		pairs->Fill(ran_pairs * 1e6 / (5 * loss_energy) * 1.582);
 	}
 	
 	sum->Add(neg);
@@ -2818,7 +2818,159 @@ TCanvas* drawIV(std::vector<TString> inputFiles){
 	c->Update(); 
 	return c;
 }
+#define EXPORT
 
+class EXPORT KElec
+{
+private:
+	Int_t Method;
+	Double_t Cp;
+	Double_t Rp;
+	Double_t Crc;
+	Double_t R1rc;
+	Double_t R2rc;
+	Double_t Ccr;
+	Double_t R1cr;
+	Double_t R2cr;
+	Double_t PeakTime;
+	Double_t IntTime;
+
+public:
+	KElec(Double_t = 5e-12, Double_t = 50, Double_t = 25e-9, Double_t = 1e-12, Double_t = 200, Double_t = 200, Double_t = 1e-12, Double_t = 200, Double_t = 200, Double_t = 25e-9, Int_t = 0);
+	virtual ~KElec();
+	Double_t Trapez(TH1F *, Int_t, Double_t);
+	Double_t Simpson(TH1F *, Int_t, Double_t);
+	void preamp(TH1F *his) { preamp(Cp, Rp, his, IntTime, Method); };
+	void preamp(Double_t, Double_t, TH1F *, Double_t = -1111, Int_t = 0);
+	void RCshape(Double_t, Double_t, Double_t, TH1F *, Int_t = 0);
+	void CRshape(Double_t, Double_t, Double_t, TH1F *, Int_t = 0);
+};
+
+KElec::KElec(Double_t x1, Double_t x2, Double_t x3, Double_t x4, Double_t x5, Double_t x6, Double_t x7, Double_t x8, Double_t x9, Double_t x10, Int_t met)
+{
+	Cp = x1;
+	Rp = x2;
+	IntTime = x3;
+	Crc = x4;
+	R1rc = x5;
+	R2rc = x6;
+	Ccr = x7;
+	R1cr = x8;
+	R2cr = x9;
+	PeakTime = x10;
+	Method = met;
+}
+KElec::~KElec()
+{
+	//Clear();
+}
+void KElec::preamp(Double_t C, Double_t R, TH1F *histo, Double_t cut, Int_t method)
+{
+	//static double e_0 = 1.60217733e-19;
+	Double_t suma = 0;
+	Double_t tau = R * C;
+	Double_t t;
+	Int_t i;
+	TH1F *whisto = new TH1F();
+	histo->Copy(*whisto);
+
+	if (cut == -1111)
+		cut = histo->GetNbinsX() * histo->GetBinWidth(1);
+
+	for (i = 1; i < histo->GetNbinsX() - 1; i++)
+	{
+		t = whisto->GetBinCenter(i);
+		if (t <= cut)
+		{
+			if (method == 0)
+				suma += Trapez(whisto, i, tau);
+			if (method == 1)
+				suma += Simpson(whisto, i, tau);
+		}
+		histo->SetBinContent(i, (Float_t)(1 / C * suma * TMath::Exp(-t / tau)));
+		// printf("%d,t=%e,suma=%e,tau=%e,tapez=%e\n",i,t,suma,tau,Trapez(histo,i,tau));
+	}
+	delete whisto;
+}
+
+Double_t KElec::Trapez(TH1F *histo, Int_t i, Double_t tau)
+{
+	Double_t f1 = 0, f2 = 0, h = 0, t1 = 0, t2 = 0;
+	if (i == 1)
+		return (histo->GetBinContent(i) * histo->GetBinWidth(i) / 2);
+	else
+	{
+		t1 = histo->GetBinCenter(i - 1);
+		f1 = histo->GetBinContent(i - 1) * TMath::Exp(t1 / tau);
+		t2 = histo->GetBinCenter(i);
+		f2 = histo->GetBinContent(i) * TMath::Exp(t2 / tau);
+		h = histo->GetBinWidth(i); //printf("tutut %d,t1=%e,t2=%e,f1=%e,f2=%e\n",i,t1,t2,f1,f2);
+		return (h * 0.5 * (f1 + f2));
+	}
+}
+
+Double_t KElec::Simpson(TH1F *histo, Int_t i, Double_t tau)
+{
+	Double_t f1 = 0, f2 = 0, f3 = 0, h = 0, t1 = 0, t2 = 0, t3 = 0;
+	if (i < 3 || i % 2 == 0)
+		return (Trapez(histo, i, tau));
+	else
+	{
+		h = histo->GetBinWidth(i);
+		t1 = histo->GetBinCenter(i - 2);
+		f1 = histo->GetBinContent(i - 2) * TMath::Exp(t1 / tau);
+		t2 = histo->GetBinCenter(i - 1);
+		f2 = histo->GetBinContent(i - 1) * TMath::Exp(t2 / tau);
+		t3 = histo->GetBinCenter(i);
+		f3 = histo->GetBinContent(i) * TMath::Exp(t3 / tau);
+		return (h * (0.33333333333 * f1 + 1.333333333 * f2 + 0.3333333333333 * f3) - Trapez(histo, i - 1, tau));
+	}
+}
+
+void KElec::RCshape(Double_t C, Double_t R1, Double_t R2, TH1F *histo, Int_t method)
+{
+	Double_t suma = 0;
+	Double_t tau = (R1 * R2) * C / (R1 + R2);
+	Double_t tau1 = R1 * C;
+	Double_t t;
+	Int_t i;
+	TH1F *whisto = new TH1F();
+	histo->Copy(*whisto);
+
+	for (i = 1; i < histo->GetNbinsX() - 1; i++)
+	{
+		t = whisto->GetBinCenter(i);
+		if (method == 0)
+			suma += Trapez(whisto, i, tau);
+		if (method == 1)
+			suma += Simpson(whisto, i, tau);
+		histo->SetBinContent(i, (Float_t)(1 / tau1 * suma * TMath::Exp(-t / tau)));
+	}
+	delete whisto;
+}
+
+void KElec::CRshape(Double_t C, Double_t R1, Double_t R2, TH1F *histo, Int_t method)
+{
+	Double_t suma = 0;
+	Double_t tau = (R1 * R2) * C / (R1 + R2);
+	Double_t tau1 = R1 * C;
+	Double_t t, f;
+	Int_t i;
+	TH1F *whisto = new TH1F();
+	histo->Copy(*whisto);
+
+	for (i = 1; i < histo->GetNbinsX() - 1; i++)
+	{
+		t = whisto->GetBinCenter(i);
+		f = whisto->GetBinContent(i);
+		if (method == 0)
+			suma += Trapez(whisto, i, tau);
+		if (method == 1)
+			suma += Simpson(whisto, i, tau);
+		histo->SetBinContent(i, f - (1 / tau - 1 / tau1) * suma * TMath::Exp(-t / tau));
+	}
+	delete whisto;
+}
 
 #ifndef __CINT__ 
 
@@ -2919,11 +3071,11 @@ int main(int argc, char** argv) {
 			neff->SetParameter(0, 10);
 			KPad det(1000,100);
 			det.Neff = neff;
-			det.SetDriftHisto(10e-9, 100);
+			det.SetDriftHisto(20e-9, 200);
 			det.Voltage = -500;
 			det.SetUpVolume(1);
-			det.SetEntryPoint(500, 0, 0.5); //set entry point of the track
-			det.SetExitPoint(500, 100, 0.5);
+			det.SetEntryPoint(1000, 0, 0.5); //set entry point of the track
+			det.SetExitPoint(1000, 100, 0.5);
 			det.SetUpElectrodes();
 			det.SStep = 0.1; // set the drift step of e-h pairs
 			det.Temperature = 300; // set the operation temperature
@@ -2935,71 +3087,88 @@ int main(int argc, char** argv) {
 			
 
 
-			TGraph *ElField;						  // electric field
-			TGraph *ElPotential;					  // electric potential					  // doping profile
+			// TGraph *ElField;						  // electric field
+			// TGraph *ElPotential;					  // electric potential					  // doping profile
 
-			// // Show mip track
-			TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
-			c2.Divide(2, 3);						  //divide canvas
-			//electic field
-			c2.cd(1);
-			ElField = det.DrawPad("f");
-			ElField->SetTitle("Electric field");
-			ElField->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
-			ElField->GetYaxis()->SetTitle("E [V/#mum]");
-			//electric potential  or weighting potential ???
-			c2.cd(2);
-			ElPotential=det.DrawPad("p");
-			ElPotential->SetTitle("Electric Potential");
-			ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
-			ElPotential->GetYaxis()->SetTitle("U [V]");
+			// // // Show mip track
+			// TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
+			// c2.Divide(2, 3);						  //divide canvas
+			// //electic field
+			// c2.cd(1);
+			// ElField = det.DrawPad("f");
+			// ElField->SetTitle("Electric field");
+			// ElField->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			// ElField->GetYaxis()->SetTitle("E [V/#mum]");
+			// //electric potential  or weighting potential ???
+			// c2.cd(2);
+			// ElPotential=det.DrawPad("p");
+			// ElPotential->SetTitle("Electric Potential");
+			// ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			// ElPotential->GetYaxis()->SetTitle("U [V]");
 
-			// //doping distribution
-			c2.cd(3);
-			TF1 *neffGc;
-			neffGc = neff->DrawCopy();
-			neffGc->SetRange(0, 21);
-			neffGc->SetTitle("Doping profile (full detector)");
-			neffGc->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
-			neffGc->GetYaxis()->SetTitle("N_{eff} [10^{12} cm^{-3}]");
-			neffGc->GetYaxis()->SetTitleOffset(1.5);
-			//induced current
-			c2.cd(4);
-			det.MipIR(50);
-			det.sum->SetLineColor(1);
-			det.neg->SetLineColor(4);
-			det.pos->SetLineColor(2);
-			det.sum->Draw("HIST");		//plot total induced current
-			det.neg->Draw("SAME HIST"); //plot electrons' induced current
-			det.pos->Draw("SAME HIST"); //plot holes' induced current
-			auto legend = new TLegend(0.7, 0.4, 0.9, 0.6);
-			legend->AddEntry(det.sum, "sum", "l");
-			legend->AddEntry(det.neg, "electron", "l");
-			legend->AddEntry(det.pos, "hole", "l");
-			legend->SetBorderSize(0);
-			legend->Draw();
-			//charge drift
-			c2.cd(5);
-			det.ShowMipIR(150);
-			c2.cd(6);
-			det.MipIR(5100);
-			det.pairs->Draw("HIST");
-
-			// TCanvas c3("Plots", "Plots", 1000, 1000);
-			// //MiPIR(precision) 
+			// // //doping distribution
+			// c2.cd(3);
+			// TF1 *neffGc;
+			// neffGc = neff->DrawCopy();
+			// neffGc->SetRange(0, 21);
+			// neffGc->SetTitle("Doping profile (full detector)");
+			// neffGc->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			// neffGc->GetYaxis()->SetTitle("N_{eff} [10^{12} cm^{-3}]");
+			// neffGc->GetYaxis()->SetTitleOffset(1.5);
+			// //induced current
+			// c2.cd(4);
+			// det.MipIR(50);
+			// det.sum->SetLineColor(1);
+			// det.neg->SetLineColor(4);
+			// det.pos->SetLineColor(2);
+			// det.sum->Draw("HIST");		//plot total induced current
+			// det.neg->Draw("SAME HIST"); //plot electrons' induced current
+			// det.pos->Draw("SAME HIST"); //plot holes' induced current
+			// auto legend = new TLegend(0.7, 0.4, 0.9, 0.6);
+			// legend->AddEntry(det.sum, "sum", "l");
+			// legend->AddEntry(det.neg, "electron", "l");
+			// legend->AddEntry(det.pos, "hole", "l");
+			// legend->SetBorderSize(0);
+			// legend->Draw();
+			// //charge drift
+			// c2.cd(5);
+			// det.ShowMipIR(150);
+			// c2.cd(6);
 			// det.MipIR(5100);
-			
-			// //det.pairs->Draw("HIST");
+			//det.pairs->Draw("HIST");
+			//Electronics
+			Int_t i=0;
+			do
+			{
+			//TH1::AddDirectory(kFALSE);
+			TCanvas c3("Plots", "Plots", 1000, 1000);
+			//MiPIR(precision)
+			det.MipIR(1000);
+			//c3.Divide(2, 1);
+			// c3.cd(1);
+			// TH1F *Icurrent = (TH1F *)det.sum->Clone();
+			// Icurrent->SetLineColor(2);
+			// Icurrent->SetTitle("induced current");
+			// Icurrent->Draw("HIST");
 			// //c3.SaveAs("txt/SiC_NJU_waveform.txt");
-			// KElec tct;
-			// tct.preamp(det.sum);
-			// tct.CRshape(40e-12, 50, 10000, det.sum);
-			// tct.RCshape(40e-12, 50, 10000, det.sum);
-			// tct.RCshape(40e-12, 50, 10000, det.sum);
-			// tct.RCshape(40e-12, 50, 10000, det.sum);
-			// det.sum->Draw();
-
-			theApp.Run();
+			// c3.cd(2);
+			KElec tct;
+			tct.preamp(det.sum);
+			tct.CRshape(40e-12, 50, 10000, det.sum);
+			tct.RCshape(40e-12, 50, 10000, det.sum);
+			tct.RCshape(40e-12, 50, 10000, det.sum);
+			tct.RCshape(40e-12, 50, 10000, det.sum);
+			// det.sum->SetLineColor(4);
+			// det.sum->SetTitle("current after electrics");
+			det.sum->Draw("HIST");
+			std::string output;
+			output = "out/sic_2021_4_13/sic_events_" + std::to_string(i)+".C";
+			const char *out = output.c_str();
+			c3.SaveAs(out);
+			std::cout<<output<<std::endl;
+			i++;
+			} while (i<1000);
+			//theApp.Run();
 		} // End "2D"
 	}
 

@@ -510,7 +510,7 @@ void KStruct::GetCH(TH1F *histo, Int_t Update, Float_t Mult, Float_t tau)
 	Axis_t *ti = new Axis_t[Steps + 1]; // Changed when migrating from 2.23 to 2.25 or higher
 	for (i = 1; i < Steps + 1; i++)
 	{
-		ch[i] = Charge[i];
+		ch[i] = Charge[i]*e_0/1e-11;
 		ti[i] = Time[i];
 	}								   // Changed when migrating from 2.23 to 2.25
 	his->FillN(Steps, &ti[1], &ch[1]); // Changed when migrating from 2.23 to 2.25
@@ -1577,7 +1577,7 @@ void KDetector::SetDriftHisto(Float_t x, Int_t numbins)
 		if(pairs!=NULL) delete pairs;
 		pairs = new TH1F("pairs", "pairs", numbins/5, 0, 150);
 		sum->SetXTitle("t [s]");  neg->SetXTitle("t [s]"); pos->SetXTitle("t [s]"); pairs->SetXTitle("e-h pairs/um");
-		sum->SetYTitle("I [arb.]");neg->SetYTitle("I [arb.]");pos->SetYTitle("I [arb.]"); pairs->SetXTitle("events");
+		sum->SetYTitle("current [A]");neg->SetYTitle("current [A]");pos->SetYTitle("current [A]"); pairs->SetXTitle("events");
 		sum->GetYaxis()->SetTitleOffset(1.4); neg->GetYaxis()->SetTitleOffset(1.4); pos->GetYaxis()->SetTitleOffset(1.4);
 		pairs->GetYaxis()->SetTitleOffset(1.4);
 		pos->SetLineColor(2);
@@ -1997,7 +1997,7 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 	Double_t data[4];
 	Float_t sp[3],sp_2[3];
 	Float_t drift_d; //drift distance each bucket
-	Int_t n_pairs;
+	Float_t n_pairs;
 	Double_t loss_energy;
 	Float_t Io, len = 0, lent = 0, lenlam, scalef = 0, pscalef = 0, mule, mulh;
 	int i, j, k, e,mm;
@@ -2048,72 +2048,68 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 		drift_d = TMath::Sqrt(TMath::Power(sp_2[0]-sp[0], 2) + TMath::Power(sp_2[1]-sp[1], 2)+ TMath::Power(sp_2[2]-sp[2], 2));
 		gRandom = new TRandom3(0);
 		float ran_pairs = EDist->GetRandom();
-		n_pairs =(int) round(drift_d*ran_pairs*1e6/(5*loss_energy)*1.582);
+		n_pairs =drift_d*ran_pairs*1e6/(5*loss_energy)*1.582;
 		//1.582 is change silicon loss energy to silicon carbide 
 		// if (i<10) std::cout<<"drift_d:"<<drift_d<<std::endl;
 		// if (i<10) std::cout<<"loss_energy:"<<loss_energy<<std::endl;
 		// if (i<10) std::cout<<"n_pairs:"<<n_pairs<<std::endl;
-		for (mm = 0; mm<n_pairs;mm++)
-		{
 			//if (mm==0) std::cout<<"n_pairs:"<<n_pairs<<std::endl;
-			for (j = 0; j < average; j++)
+		for (j = 0; j < average; j++)
+		{
+
+			Drift(sp[0], sp[1], sp[2], 1, &seg);
+			seg.GetCH(histop, 1, 1, tauh);
+			Drift(sp[0], sp[1], sp[2], -1, &seg);
+
+			if (MTresh > 1)
 			{
+				mule = seg.GetCHMult(histon, 1, 1, taue); // performing multiplication
+															//      if(Debug)  printf(":: Mstep = %f ::",mule);
+			}
+			else
+				seg.GetCH(histon, 1, 1, taue);
 
-				Drift(sp[0], sp[1], sp[2], 1, &seg);
-				seg.GetCH(histop, 1, 1, tauh);
-				Drift(sp[0], sp[1], sp[2], -1, &seg);
-
-				if (MTresh > 1)
+			if (mule > MTresh && MTresh > 1) //if the multiplication is large enough then do the hole tracking
+			{
+				for (e = 1; e < seg.Steps + 1; e++)
 				{
-					mule = seg.GetCHMult(histon, 1, 1, taue); // performing multiplication
-															  //      if(Debug)  printf(":: Mstep = %f ::",mule);
-				}
-				else
-					seg.GetCH(histon, 1, 1, taue);
-
-				if (mule > MTresh && MTresh > 1) //if the multiplication is large enough then do the hole tracking
-				{
-					for (e = 1; e < seg.Steps + 1; e++)
+					Drift(seg.Xtrack[e], seg.Ytrack[e], seg.Ztrack[e], 1, &segmul, seg.Time[e]);
+					mulh = segmul.GetCHMult(histop, 1, seg.MulCar[e], tauh);
+					if (mulh > BDTresh && Debug)
 					{
-						Drift(seg.Xtrack[e], seg.Ytrack[e], seg.Ztrack[e], 1, &segmul, seg.Time[e]);
-						mulh = segmul.GetCHMult(histop, 1, seg.MulCar[e], tauh);
-						if (mulh > BDTresh && Debug)
-						{
-							printf("HOLE MULTIPLICATION - BREAKDOWN\n");
-							BreakDown = 1;
-						}
+						printf("HOLE MULTIPLICATION - BREAKDOWN\n");
+						BreakDown = 1;
 					}
 				}
 			}
-
-			histop->Scale(1 / ((Float_t)average));
-			histon->Scale(1 / ((Float_t)average));
+		}
+		histop->Scale(n_pairs);
+		histon->Scale(n_pairs);
 
 		///////////////////////////////////////////////////////////////////
 		// If there is no attenuation coefficient we consider that as mip//
 		// Changes made by GK 3.3.2020                                 ////
 		///////////////////////////////////////////////////////////////////
-			if (lambda != 0)
-			{
-				len = 0;
-				for (k = 0; k < 3; k++)
-					len += TMath::Power(sp[k] - enp[k], 2);
-				len = TMath::Sqrt(len);
-				scalef = Io * TMath::Exp(-len / lambda) * SStep;
-				//printf("step=%d ::  len=%f um, scalef=%f pscalef=%f\n",i,len,scalef,pscalef);
-				histon->Scale(scalef);
-				histop->Scale(scalef);
-				pscalef += scalef;
-				histop->Scale(lent / div);
-				histon->Scale(lent / div);
-			}
+		if (lambda != 0)
+		{
+			len = 0;
+			for (k = 0; k < 3; k++)
+				len += TMath::Power(sp[k] - enp[k], 2);
+			len = TMath::Sqrt(len);
+			scalef = Io * TMath::Exp(-len / lambda) * SStep;
+			//printf("step=%d ::  len=%f um, scalef=%f pscalef=%f\n",i,len,scalef,pscalef);
+			histon->Scale(scalef);
+			histop->Scale(scalef);
+			pscalef += scalef;
+			histop->Scale(lent / div);
+			histon->Scale(lent / div);
+		}
 		/////////////////////////////////////////////////////////////////////////////////
 			
-			pos->Add(histop);
-			neg->Add(histon);
-			histop->Reset();
-			histon->Reset();
-		}
+		pos->Add(histop);
+		neg->Add(histon);
+		histop->Reset();
+		histon->Reset();
 		pairs->Fill(ran_pairs * 1e6 / (5 * loss_energy) * 1.582);
 	}
 	
@@ -3062,20 +3058,20 @@ int main(int argc, char** argv) {
 			// det->neg->Draw("HIST same"); //electrons current
 			// det->pos->Draw("HIST same"); // hole current
 			c3.SaveAs("txt/Si_induced_current.C");
-			theApp.Run();
+			//theApp.Run();
 		} // End "3D"
 
 		if (!strcmp(argv[i], "2D"))
 		{
 			TF1 *neff = new TF1("neff", "[0]+x[0]*0", 0, 1000);
 			neff->SetParameter(0, 10);
-			KPad det(1000,100);
+			KPad det(100,100);
 			det.Neff = neff;
-			det.SetDriftHisto(20e-9, 200);
+			det.SetDriftHisto(2.5e-9, 100);
 			det.Voltage = -500;
 			det.SetUpVolume(1);
-			det.SetEntryPoint(1000, 0, 0.5); //set entry point of the track
-			det.SetExitPoint(1000, 100, 0.5);
+			det.SetEntryPoint(50, 0, 0.5); //set entry point of the track
+			det.SetExitPoint(50, 100, 0.5);
 			det.SetUpElectrodes();
 			det.SStep = 0.1; // set the drift step of e-h pairs
 			det.Temperature = 300; // set the operation temperature
@@ -3090,7 +3086,7 @@ int main(int argc, char** argv) {
 			// TGraph *ElField;						  // electric field
 			// TGraph *ElPotential;					  // electric potential					  // doping profile
 
-			// // // Show mip track
+			// // Show mip track
 			// TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
 			// c2.Divide(2, 3);						  //divide canvas
 			// //electic field
@@ -3130,27 +3126,27 @@ int main(int argc, char** argv) {
 			// legend->AddEntry(det.pos, "hole", "l");
 			// legend->SetBorderSize(0);
 			// legend->Draw();
-			// //charge drift
+			//charge drift
 			// c2.cd(5);
 			// det.ShowMipIR(150);
 			// c2.cd(6);
 			// det.MipIR(5100);
-			//det.pairs->Draw("HIST");
+			// det.pairs->Draw("HIST");
 			//Electronics
+			TH1F *charge_total = new TH1F("t_charge", "t_charge", 100, -1.2, -0.4);
 			Int_t i=0;
 			do
 			{
-			//TH1::AddDirectory(kFALSE);
+		 	TH1::AddDirectory(kFALSE);
 			TCanvas c3("Plots", "Plots", 1000, 1000);
 			//MiPIR(precision)
 			det.MipIR(1000);
-			//c3.Divide(2, 1);
+			// c3.Divide(2, 1);
 			// c3.cd(1);
-			// TH1F *Icurrent = (TH1F *)det.sum->Clone();
+			TH1F *Icurrent = (TH1F *)det.sum->Clone();
 			// Icurrent->SetLineColor(2);
 			// Icurrent->SetTitle("induced current");
 			// Icurrent->Draw("HIST");
-			// //c3.SaveAs("txt/SiC_NJU_waveform.txt");
 			// c3.cd(2);
 			KElec tct;
 			tct.preamp(det.sum);
@@ -3166,10 +3162,16 @@ int main(int argc, char** argv) {
 			const char *out = output.c_str();
 			c3.SaveAs(out);
 			std::cout<<output<<std::endl;
+			charge_total->Fill(Icurrent->Integral()*1e4);
+			std::cout<<"charge"<<Icurrent->Integral()*1e4<<std::endl;
 			i++;
 			} while (i<1000);
-			//theApp.Run();
-		} // End "2D"
+			TCanvas c4("Plots", "Plots", 1000, 1000);
+			charge_total->Draw("HIST");
+			c4.SaveAs("eh_pairs.pdf");
+
+		theApp.Run();
+		 } // End "2D"
 	}
 
 

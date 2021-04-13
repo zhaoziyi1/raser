@@ -510,11 +510,12 @@ void KStruct::GetCH(TH1F *histo, Int_t Update, Float_t Mult, Float_t tau)
 	Axis_t *ti = new Axis_t[Steps + 1]; // Changed when migrating from 2.23 to 2.25 or higher
 	for (i = 1; i < Steps + 1; i++)
 	{
-		ch[i] = Charge[i]*e_0/1e-11;
+		ch[i] = Charge[i]*e_0;
 		ti[i] = Time[i];
 	}								   // Changed when migrating from 2.23 to 2.25
 	his->FillN(Steps, &ti[1], &ch[1]); // Changed when migrating from 2.23 to 2.25
-
+	for (i = 1; i < his->GetNbinsX(); i++)
+		his->SetBinContent(i, his->GetBinContent(i) /((histo->GetXaxis()->GetXmax() - histo->GetXaxis()->GetXmin()) / histo->GetNbinsX()));
 	// Trappping is included if tau>0   // added 20.1.2010
 	if (tau > 0)
 	{
@@ -3067,7 +3068,7 @@ int main(int argc, char** argv) {
 			neff->SetParameter(0, 10);
 			KPad det(100,100);
 			det.Neff = neff;
-			det.SetDriftHisto(2.5e-9, 100);
+			det.SetDriftHisto(2.5e-9, 1000);
 			det.Voltage = -500;
 			det.SetUpVolume(1);
 			det.SetEntryPoint(50, 0, 0.5); //set entry point of the track
@@ -3141,29 +3142,28 @@ int main(int argc, char** argv) {
 			TCanvas c3("Plots", "Plots", 1000, 1000);
 			//MiPIR(precision)
 			det.MipIR(1000);
-			// c3.Divide(2, 1);
-			// c3.cd(1);
 			TH1F *Icurrent = (TH1F *)det.sum->Clone();
-			// Icurrent->SetLineColor(2);
-			// Icurrent->SetTitle("induced current");
-			// Icurrent->Draw("HIST");
-			// c3.cd(2);
+			Icurrent->SetLineColor(2);
+			Icurrent->SetTitle("induced current");
+			Icurrent->Draw("HIST");
 			KElec tct;
 			tct.preamp(det.sum);
 			tct.CRshape(40e-12, 50, 10000, det.sum);
 			tct.RCshape(40e-12, 50, 10000, det.sum);
 			tct.RCshape(40e-12, 50, 10000, det.sum);
 			tct.RCshape(40e-12, 50, 10000, det.sum);
-			// det.sum->SetLineColor(4);
-			// det.sum->SetTitle("current after electrics");
-			det.sum->Draw("HIST");
+			det.sum->SetLineColor(4);
+			det.sum->SetTitle("current after electrics");
+			det.sum->Draw("HIST SAME");
 			std::string output;
 			output = "out/sic_2021_4_13/sic_events_" + std::to_string(i)+".C";
 			const char *out = output.c_str();
 			c3.SaveAs(out);
 			std::cout<<output<<std::endl;
-			charge_total->Fill(Icurrent->Integral()*1e4);
-			std::cout<<"charge"<<Icurrent->Integral()*1e4<<std::endl;
+			Double_t charge_t;
+			charge_t=Icurrent->Integral()*((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX())*1e15;
+			charge_total->Fill(charge_t);
+			std::cout<<"charge:"<<charge_t<<std::endl;
 			i++;
 			} while (i<1000);
 			TCanvas c4("Plots", "Plots", 1000, 1000);

@@ -28,8 +28,9 @@
 #include <TVector3.h>
 #include "TH1.h"
 #include "TRandom3.h"
-// KDetSim 
-
+#include "TGaxis.h"
+// KDetSim
+using namespace std;
 // nrutil
 // double *dvector(long nl, long nh);
 #define NR_END 1 
@@ -1998,8 +1999,8 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 	Double_t data[4];
 	Float_t sp[3],sp_2[3];
 	Float_t drift_d; //drift distance each bucket
-	Float_t n_pairs;
-	Double_t loss_energy;
+	Float_t n_pairs=0,total_pairs=0;
+	Double_t loss_energy=0;
 	Float_t Io, len = 0, lent = 0, lenlam, scalef = 0, pscalef = 0, mule, mulh;
 	int i, j, k, e,mm;
 	KStruct seg, segmul;
@@ -2014,6 +2015,7 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 	pos->Reset();
 	neg->Reset();
 	pairs->Reset();
+
 
 	/////////////////////////////////////////////////////////////////
 	// If there is no attenuation coefficient we consider that as mip
@@ -2050,6 +2052,7 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 		gRandom = new TRandom3(0);
 		float ran_pairs = EDist->GetRandom();
 		n_pairs =drift_d*ran_pairs*1e6/(5*loss_energy)*1.582;
+		total_pairs+=n_pairs;
 		//1.582 is change silicon loss energy to silicon carbide 
 		// if (i<10) std::cout<<"drift_d:"<<drift_d<<std::endl;
 		// if (i<10) std::cout<<"loss_energy:"<<loss_energy<<std::endl;
@@ -2106,13 +2109,32 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 			histon->Scale(lent / div);
 		}
 		/////////////////////////////////////////////////////////////////////////////////
-			
+		pairs->Fill(ran_pairs*1e6/(5*loss_energy)*1.582);
 		pos->Add(histop);
 		neg->Add(histon);
 		histop->Reset();
 		histon->Reset();
-		pairs->Fill(ran_pairs * 1e6 / (5 * loss_energy) * 1.582);
+		
 	}
+
+	/// total laudau distribution
+	float d = TMath::Sqrt(TMath::Power((exp[0] - enp[0]), 2) + TMath::Power((exp[1] - enp[1]), 2) + TMath::Power((exp[2] - enp[2]), 2));
+	float mpv = (0.027 * log(d) + 0.126)*1.582; //keV/micron ==> log base "e"
+	float FWHM = 0.31 * pow(d, -0.19);	   // this is the FWHM keV/micron, 4 times the sigma parameter in root.
+	float DA = FWHM / 4.;
+	TRandom3 Lan;
+	TDatime *time; // current time
+	time = new TDatime();
+	Lan.SetSeed(time->TDatime::GetTime());
+	float LanConst = 0;
+	LanConst = Lan.Landau(mpv, DA);
+
+	if (LanConst > 5. * mpv)
+		LanConst = Lan.Landau(mpv, DA);
+	LanConst *=1000/loss_energy*d;
+
+	pos->Scale(1/total_pairs*LanConst);
+	neg->Scale(1/total_pairs*LanConst);
 	
 	sum->Add(neg);
 	sum->Add(pos);
@@ -2990,8 +3012,8 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	TApplication theApp("App", 0, 0);
-	theApp.SetReturnFromRun(true);
+	// TApplication theApp("App", 0, 0);
+	// theApp.SetReturnFromRun(true);
 	gStyle->SetCanvasPreferGL(kTRUE);
 
 	for (int i = 0; i < argc; i++)
@@ -3068,7 +3090,7 @@ int main(int argc, char** argv) {
 			neff->SetParameter(0, 10);
 			KPad det(100,100);
 			det.Neff = neff;
-			det.SetDriftHisto(2.5e-9, 1000);
+			det.SetDriftHisto(2e-9, 1000);
 			det.Voltage = -500;
 			det.SetUpVolume(1);
 			det.SetEntryPoint(50, 0, 0.5); //set entry point of the track
@@ -3080,30 +3102,29 @@ int main(int argc, char** argv) {
  			//set exit point of the track
 			// switch on the diffusion
 			det.diff = 1;
-			// MIP non-uniform charge deposition
-			
 
+			//--------------------------------------basic information---------------------------------------//
 
 			// TGraph *ElField;						  // electric field
-			// TGraph *ElPotential;					  // electric potential					  // doping profile
+			// TGraph *ElPotential;					  // electric potential
+			TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
+			//c2.Divide(2, 3);						  //divide canvas
 
-			// // Show mip track
-			// TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
-			// c2.Divide(2, 3);						  //divide canvas
-			// //electic field
+			// // // // // // electic field
 			// c2.cd(1);
 			// ElField = det.DrawPad("f");
 			// ElField->SetTitle("Electric field");
 			// ElField->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
 			// ElField->GetYaxis()->SetTitle("E [V/#mum]");
-			// //electric potential  or weighting potential ???
+
+			// // // // // // electric potential  or weighting potential ???
 			// c2.cd(2);
 			// ElPotential=det.DrawPad("p");
 			// ElPotential->SetTitle("Electric Potential");
 			// ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
 			// ElPotential->GetYaxis()->SetTitle("U [V]");
 
-			// // //doping distribution
+			// // // // // // doping distribution
 			// c2.cd(3);
 			// TF1 *neffGc;
 			// neffGc = neff->DrawCopy();
@@ -3112,63 +3133,145 @@ int main(int argc, char** argv) {
 			// neffGc->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
 			// neffGc->GetYaxis()->SetTitle("N_{eff} [10^{12} cm^{-3}]");
 			// neffGc->GetYaxis()->SetTitleOffset(1.5);
-			// //induced current
-			// c2.cd(4);
-			// det.MipIR(50);
-			// det.sum->SetLineColor(1);
-			// det.neg->SetLineColor(4);
-			// det.pos->SetLineColor(2);
-			// det.sum->Draw("HIST");		//plot total induced current
-			// det.neg->Draw("SAME HIST"); //plot electrons' induced current
-			// det.pos->Draw("SAME HIST"); //plot holes' induced current
-			// auto legend = new TLegend(0.7, 0.4, 0.9, 0.6);
-			// legend->AddEntry(det.sum, "sum", "l");
-			// legend->AddEntry(det.neg, "electron", "l");
-			// legend->AddEntry(det.pos, "hole", "l");
-			// legend->SetBorderSize(0);
-			// legend->Draw();
-			//charge drift
+
+			// // // // // // induced current
+			//c2.cd(4);
+			gStyle->SetOptStat(kFALSE);
+			det.MipIR(1000);
+			TH1F *ele_current = (TH1F *)det.sum->Clone();
+			det.sum->SetLineColor(3);
+			det.neg->SetLineColor(4);
+			det.pos->SetLineColor(2);
+			det.sum->Draw("HIST");		//plot total induced current
+			det.neg->Draw("SAME HIST"); //plot electrons' induced current
+			det.pos->Draw("SAME HIST"); //plot holes' induced current
+			c2.Update();
+			KElec tct;
+			tct.preamp(ele_current);
+			tct.CRshape(40e-12, 50, 10000, ele_current);
+			// tct.RCshape(40e-12, 50, 10000, ele_current);
+			// tct.RCshape(40e-12, 50, 10000, ele_current);
+			// tct.RCshape(40e-12, 50, 10000, ele_current);
+			ele_current->Scale(1000);
+			float rightmax = 1.1 * ele_current->GetMinimum();
+			float scale = gPad->GetUymin() / rightmax;
+			ele_current->SetLineColor(6);
+			ele_current->Scale(scale);
+			ele_current->Draw("HIST SAME");
+			auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
+								   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
+			axis->SetLineColor(6);
+			axis->SetTextColor(6);
+			axis->SetTextSize(0.02);
+			axis->SetLabelColor(6);
+			axis->SetLabelSize(0.02);
+			axis->SetTitle("ampl(mV)");
+			axis->Draw();
+
+			auto legend = new TLegend(0.6, 0.3, 0.9, 0.6);
+			legend->AddEntry(det.sum, "sum", "l");
+			legend->AddEntry(det.neg, "electron", "l");
+			legend->AddEntry(det.pos, "hole", "l");
+			legend->AddEntry(ele_current, "current after electric", "l");
+			legend->SetBorderSize(0);
+			legend->Draw();
+
+			// // // // // // charge drift
 			// c2.cd(5);
 			// det.ShowMipIR(150);
+
+			// // // // // // e-h pairs
 			// c2.cd(6);
 			// det.MipIR(5100);
 			// det.pairs->Draw("HIST");
-			//Electronics
-			TH1F *charge_total = new TH1F("t_charge", "t_charge", 100, -1.2, -0.4);
-			Int_t i=0;
-			do
-			{
-		 	TH1::AddDirectory(kFALSE);
-			TCanvas c3("Plots", "Plots", 1000, 1000);
-			//MiPIR(precision)
-			det.MipIR(1000);
-			TH1F *Icurrent = (TH1F *)det.sum->Clone();
-			Icurrent->SetLineColor(2);
-			Icurrent->SetTitle("induced current");
-			Icurrent->Draw("HIST");
-			KElec tct;
-			tct.preamp(det.sum);
-			tct.CRshape(40e-12, 50, 10000, det.sum);
-			tct.RCshape(40e-12, 50, 10000, det.sum);
-			tct.RCshape(40e-12, 50, 10000, det.sum);
-			tct.RCshape(40e-12, 50, 10000, det.sum);
-			det.sum->SetLineColor(4);
-			det.sum->SetTitle("current after electrics");
-			det.sum->Draw("HIST SAME");
-			std::string output;
-			output = "out/sic_2021_4_13/sic_events_" + std::to_string(i)+".C";
-			const char *out = output.c_str();
-			c3.SaveAs(out);
-			std::cout<<output<<std::endl;
-			Double_t charge_t;
-			charge_t=Icurrent->Integral()*((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX())*1e15;
-			charge_total->Fill(charge_t);
-			std::cout<<"charge:"<<charge_t<<std::endl;
-			i++;
-			} while (i<1000);
-			TCanvas c4("Plots", "Plots", 1000, 1000);
-			charge_total->Draw("HIST");
-			c4.SaveAs("eh_pairs.pdf");
+
+			//------------------------------end------------------------------------------------------
+
+
+			//----------------------------current before electric and after electric---------------------------------------//
+			
+			// TCanvas c3("Plots", "Plots", 1000, 1000);
+			// det.MipIR(50);
+			// TH1F *Icurrent = (TH1F *)det.sum->Clone();
+			// Icurrent->SetLineColor(2);
+			// Icurrent->SetTitle("induced current");
+			// Icurrent->Draw("HIST");
+			// c3.Update();
+			// KElec tct;
+			// tct.preamp(det.sum);
+			// tct.CRshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// det.sum->Scale(1000);
+			// float rightmax = 1.1 * det.sum->GetMinimum();
+			// float scale = gPad->GetUymin() / rightmax;
+			// det.sum->SetLineColor(4);
+			// det.sum->Scale(scale);
+			// det.sum->Draw("HIST SAME");
+			// auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
+			// 					   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
+			// axis->SetLineColor(4);
+			// axis->SetTextColor(4);
+			// axis->SetTextSize(0.02);
+			// axis->SetLabelColor(4);
+			// axis->SetLabelSize(0.02);
+			// axis->SetTitle("ampl(mV)");
+			// axis->Draw();
+
+			//--------------------------------------end--------------------------------//
+
+
+			// // //--------------------timing scan------------------------------
+			// TH1F *charge_total = new TH1F("t_charge", "t_charge", 200, -2, 0);
+			// Int_t i=0;
+			// do
+			// {
+		 	// TH1::AddDirectory(kFALSE);
+
+			// // induced current
+			// TCanvas c4("Plots", "Plots", 1000, 1000);
+			// det.MipIR(1000);
+			// TH1F *Icurrent = (TH1F *)det.sum->Clone();
+			// Icurrent->Draw("HIST");
+			// Double_t charge_t;
+			// charge_t = Icurrent->Integral() * ((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX()) * 1e15;
+			// charge_total->Fill(charge_t);
+			// std::cout << "charge:" << charge_t << std::endl;
+
+			// std::string output;
+			// output = "out/sic_2021_4_15_ic/sic_events_" + std::to_string(i) + ".C";
+			// const char *out = output.c_str();
+			// c4.SaveAs(out);
+
+			// //c4.Update();
+			// //current after electric
+			// TCanvas c5("Plots", "Plots", 1000, 1000);
+			// KElec tct;
+			// tct.preamp(det.sum);
+			// // tct.CRshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// det.sum->Scale(1000);
+			// det.sum->Draw("HIST");
+
+			// std::string output_1;
+			// output_1 = "out/sic_2021_4_15_ec/sic_events_" + std::to_string(i)+".C";
+			// const char *out_1 = output_1.c_str();
+			// c5.SaveAs(out_1);
+			// std::cout<<output_1<<std::endl;
+
+
+			// i++;
+			// } while (i<1000);
+			
+			// ///////////////e-h pairs
+			// TCanvas c6("Plots", "Plots", 1000, 1000);
+			// charge_total->Draw("HIST");
+			// c6.SaveAs("eh_pairs.pdf");
+
+			// --------------------end---------------
 
 		theApp.Run();
 		 } // End "2D"

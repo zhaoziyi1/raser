@@ -2863,7 +2863,10 @@ public:
 	void preamp(Double_t, Double_t, TH1F *, Double_t = -1111, Int_t = 0);
 	void RCshape(Double_t, Double_t, Double_t, TH1F *, Int_t = 0);
 	void CRshape(Double_t, Double_t, Double_t, TH1F *, Int_t = 0);
+	Double_t CSAamp(TH1F *his, Double_t, Double_t, Double_t, Double_t, Double_t, Double_t);
 };
+
+
 
 KElec::KElec(Double_t x1, Double_t x2, Double_t x3, Double_t x4, Double_t x5, Double_t x6, Double_t x7, Double_t x8, Double_t x9, Double_t x10, Int_t met)
 {
@@ -2883,6 +2886,164 @@ KElec::~KElec()
 {
 	//Clear();
 }
+
+Double_t KElec::CSAamp(TH1F *histo, Double_t TRise, Double_t TFall, Double_t C_detector, Double_t CSATransImp, Double_t CSA_Noise, Double_t CSAVth)
+{
+	//test graph//
+	TH1F *whisto = new TH1F();
+	histo->Copy(*whisto);
+	//test graph //
+
+	int IMaxSh=histo->GetNbinsX();
+	int Step=1;
+	int DStep = Step;
+	float Qdif_Shaper = 0;
+	double *itot = new double[IMaxSh];
+	double *PreAmp_Q = new double[IMaxSh];
+	double *ShaperOut_Q = new double[IMaxSh];
+	double *ShaperOut_V = new double[IMaxSh];
+	double TauRise = TRise / 2.2*1e-9;
+	double TauFall = TFall / 2.2*1e-9;
+	double sh_max = 0.0;
+	double sh_min = 0.0;
+	int NMax_sh = 0;
+	int Nmin_sh = 0;
+	double thre_time=0.0;
+
+	double qtot=0;
+	int SC_CSAOn=1;
+
+
+
+	if(TauRise == TauFall) TauRise *= 0.9;
+
+
+	double TIMEUNIT=(histo->GetXaxis()->GetXmax() - histo->GetXaxis()->GetXmin()) / histo->GetNbinsX();
+	
+
+	for (int k=0;k<IMaxSh;k++)
+ 	{
+		PreAmp_Q[k]=0.0;
+		itot[k]=0.0;
+		ShaperOut_Q[k]=0.0;
+		ShaperOut_V[k]=0.0;
+	}
+
+	//get the induced charge anc current
+	for (int i = 0; i < IMaxSh - Step; i += Step)
+	{
+		if (i > 0)
+		{
+			PreAmp_Q[i] = 0;
+			itot[i]=histo->GetBinContent(i);
+			PreAmp_Q[i] = itot[i] * TIMEUNIT;
+			qtot += itot[i] * TIMEUNIT;
+			//histo->SetBinContent(i,PreAmp_Q[i]);   // induced charge each step
+		}
+		else if (i == 0)
+		{
+			PreAmp_Q[i] = 0; // final scale to zero
+			//histo->SetBinContent(i, PreAmp_Q[i]);
+		}
+		// Iout_temp reproduces correctly Speiler pag 127//
+	}
+
+	// get the CSA charge.   transfer induced charge to CAS charge
+	for (int i = 0; i < IMaxSh - Step; i += Step)
+	{
+		Qdif_Shaper = PreAmp_Q[i];
+
+		if (Qdif_Shaper !=0)
+			for (int ll = 0; ll<IMaxSh-i;ll+=Step)  // valid only up to IMaxSh 
+			{
+				ShaperOut_Q[i+ll] += TauFall/(TauFall+TauRise)*Qdif_Shaper*		    
+				(TMath::Exp(-ll*TIMEUNIT/TauFall)-TMath::Exp(-ll*TIMEUNIT/TauRise));					 			
+			}
+		if (fabs(ShaperOut_Q[i]) > fabs(sh_max))
+		{
+			sh_max = ShaperOut_Q[i];
+		}
+		
+	}
+
+
+	//TOFFEE_gain  change charge to amplitude ??
+	double Ci = 500 * 70*1E-15;
+	double Qfrac = 1. / (1. + C_detector * 1E-12 / Ci);
+	for (int i = 0; i < IMaxSh; i += Step)
+	{
+		if (SC_CSAOn)
+			ShaperOut_V[i] = ShaperOut_Q[i] * CSATransImp * 1e15 * qtot / sh_max; // [mV/fQ *Q/Q]
+		else
+			ShaperOut_V[i] = ShaperOut_Q[i] * CSATransImp * 1e15 * qtot * Qfrac / sh_max; // [mV/fQ *Q/Q]											  //cout << ShaperOut_V[i] << endl;
+		histo->SetBinContent(i, fabs(ShaperOut_V[i]));
+	}
+
+	sh_max = 0.;
+
+	for (int i=Step;i<IMaxSh-2*Step;i+=Step)
+	{	
+		if (ShaperOut_V[i]> sh_max) 
+		{
+			sh_max = ShaperOut_V[i];		    
+			NMax_sh = i;
+		}
+	
+		if ( ShaperOut_V[i] < sh_min) 
+		{
+			sh_min = ShaperOut_V[i];		    
+			Nmin_sh = i;
+		}
+	}
+	// // CSA noise
+
+	int NCSA_der0 = 0;
+	double CSAx1 = 0;
+	double CSAx2 = 0;
+	double Jitter = 0;
+	bool FVTh = true;
+	float DT = (TIMEUNIT*1e9*2.*DStep);
+	double STime = 0;
+
+	NCSA_der0 = (fabs(sh_max) > fabs(sh_min)) ? NMax_sh : Nmin_sh;
+
+	TRandom3 r;
+	r.SetSeed(0);
+	CSAx1 = r.Gaus(CSA_Noise,2.36);
+	
+	//histo->Reset();
+
+	for (int i = 2 * DStep; i < IMaxSh - 2 * DStep; i++)
+	{
+		if ((fabs(ShaperOut_V[i]) + CSAx1) > fabs(CSAVth) && FVTh && i < NCSA_der0 - 20)
+		{
+			Jitter = 0;
+			FVTh = false;
+			STime = (double)(i)*TIMEUNIT * 1e9;
+			float dVdt = fabs(ShaperOut_V[i + DStep] - ShaperOut_V[i - DStep]) / DT; //mV/nSec											 //mV /nSec
+			float Jit = 0;
+			if (dVdt != 0)
+			{
+				Jitter = CSA_Noise / dVdt; // in ns
+				Jit = gRandom->Gaus(0, Jitter);
+			}
+			thre_time=STime+Jit;
+		}
+	}
+	//record the waveform above the threshold
+	// if (!FVTh)
+	// {
+	// 	for (int i = 2 * DStep; i < IMaxSh - 2 * DStep; i++)
+	// 	{
+	// 		CSAx2 = r.Gaus(CSA_Noise, 2.36);
+	// 		//histo->SetBinContent(i,fabs(ShaperOut_V[i]) + CSAx2);
+	// 	}
+	// }
+
+	delete whisto;
+	return thre_time;
+	}
+
 void KElec::preamp(Double_t C, Double_t R, TH1F *histo, Double_t cut, Int_t method)
 {
 	//static double e_0 = 1.60217733e-19;
@@ -3012,8 +3173,8 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	// TApplication theApp("App", 0, 0);
-	// theApp.SetReturnFromRun(true);
+	TApplication theApp("App", 0, 0);
+	theApp.SetReturnFromRun(true);
 	gStyle->SetCanvasPreferGL(kTRUE);
 
 	for (int i = 0; i < argc; i++)
@@ -3090,7 +3251,7 @@ int main(int argc, char** argv) {
 			neff->SetParameter(0, 10);
 			KPad det(100,100);
 			det.Neff = neff;
-			det.SetDriftHisto(2e-9, 1000);
+			det.SetDriftHisto(10e-9, 5000);
 			det.Voltage = -500;
 			det.SetUpVolume(1);
 			det.SetEntryPoint(50, 0, 0.5); //set entry point of the track
@@ -3107,7 +3268,7 @@ int main(int argc, char** argv) {
 
 			// TGraph *ElField;						  // electric field
 			// TGraph *ElPotential;					  // electric potential
-			TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
+			// TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
 			//c2.Divide(2, 3);						  //divide canvas
 
 			// // // // // // electic field
@@ -3136,45 +3297,46 @@ int main(int argc, char** argv) {
 
 			// // // // // // induced current
 			//c2.cd(4);
-			gStyle->SetOptStat(kFALSE);
-			det.MipIR(1000);
-			TH1F *ele_current = (TH1F *)det.sum->Clone();
-			det.sum->SetLineColor(3);
-			det.neg->SetLineColor(4);
-			det.pos->SetLineColor(2);
-			det.sum->Draw("HIST");		//plot total induced current
-			det.neg->Draw("SAME HIST"); //plot electrons' induced current
-			det.pos->Draw("SAME HIST"); //plot holes' induced current
-			c2.Update();
-			KElec tct;
-			tct.preamp(ele_current);
-			tct.CRshape(40e-12, 50, 10000, ele_current);
-			// tct.RCshape(40e-12, 50, 10000, ele_current);
-			// tct.RCshape(40e-12, 50, 10000, ele_current);
-			// tct.RCshape(40e-12, 50, 10000, ele_current);
-			ele_current->Scale(1000);
-			float rightmax = 1.1 * ele_current->GetMinimum();
-			float scale = gPad->GetUymin() / rightmax;
-			ele_current->SetLineColor(6);
-			ele_current->Scale(scale);
-			ele_current->Draw("HIST SAME");
-			auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
-								   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
-			axis->SetLineColor(6);
-			axis->SetTextColor(6);
-			axis->SetTextSize(0.02);
-			axis->SetLabelColor(6);
-			axis->SetLabelSize(0.02);
-			axis->SetTitle("ampl(mV)");
-			axis->Draw();
+			// gStyle->SetOptStat(kFALSE);
+			// det.MipIR(1000);
+			// TH1F *ele_current = (TH1F *)det.sum->Clone();
+			// det.sum->SetLineColor(3);
+			// det.neg->SetLineColor(4);
+			// det.pos->SetLineColor(2);
+			// det.sum->Draw("HIST");		//plot total induced current
+			// det.neg->Draw("SAME HIST"); //plot electrons' induced current
+			// det.pos->Draw("SAME HIST"); //plot holes' induced current
+			// c2.Update();
+			// KElec tct;
+			// double test_out=tct.CSAamp(ele_current, 1, 1, 21.7, 0.66, 4, 5);
+			// cout<<test_out<<endl;
+			//tct.preamp(ele_current);
+			// tct.CRshape(40e-12, 50, 10000, ele_current);
+			// // tct.RCshape(40e-12, 50, 10000, ele_current);
+			// // tct.RCshape(40e-12, 50, 10000, ele_current);
+			// // tct.RCshape(40e-12, 50, 10000, ele_current);
+			// float rightmax = 1.1 * ele_current->GetMinimum();
+			// float scale = gPad->GetUymin() / rightmax;
+			// ele_current->SetLineColor(6);
+			// ele_current->Scale(scale);
+			//ele_current->Draw("HIST");
+			// auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
+			// 					   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
+			// axis->SetLineColor(6);
+			// axis->SetTextColor(6);
+			// axis->SetTextSize(0.02);
+			// axis->SetLabelColor(6);
+			// axis->SetLabelSize(0.02);
+			// axis->SetTitle("ampl(mV)");
+			// axis->Draw();
 
-			auto legend = new TLegend(0.6, 0.3, 0.9, 0.6);
-			legend->AddEntry(det.sum, "sum", "l");
-			legend->AddEntry(det.neg, "electron", "l");
-			legend->AddEntry(det.pos, "hole", "l");
-			legend->AddEntry(ele_current, "current after electric", "l");
-			legend->SetBorderSize(0);
-			legend->Draw();
+			// auto legend = new TLegend(0.6, 0.3, 0.9, 0.6);
+			// legend->AddEntry(det.sum, "sum", "l");
+			// legend->AddEntry(det.neg, "electron", "l");
+			// legend->AddEntry(det.pos, "hole", "l");
+			// legend->AddEntry(ele_current, "current after electric", "l");
+			// legend->SetBorderSize(0);
+			// legend->Draw();
 
 			// // // // // // charge drift
 			// c2.cd(5);
@@ -3223,61 +3385,99 @@ int main(int argc, char** argv) {
 
 
 			// // //--------------------timing scan------------------------------
-			// TH1F *charge_total = new TH1F("t_charge", "t_charge", 200, -2, 0);
-			// Int_t i=0;
-			// do
-			// {
-		 	// TH1::AddDirectory(kFALSE);
+			ofstream outfile;
+			outfile.open("time_resolution_2021_4_21.txt");
+			
+			TH1F *charge_total = new TH1F("t_charge", "t_charge", 200, -2, 0);
+			TH1F *CSA_time_resolution = new TH1F("CSA_time_resolution", "CSA_time_resolution", 2000, 0, 50);
+			Int_t i=0;
+			do
+			{
+		 	TH1::AddDirectory(kFALSE);
 
-			// // induced current
-			// TCanvas c4("Plots", "Plots", 1000, 1000);
-			// det.MipIR(1000);
-			// TH1F *Icurrent = (TH1F *)det.sum->Clone();
-			// Icurrent->Draw("HIST");
-			// Double_t charge_t;
-			// charge_t = Icurrent->Integral() * ((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX()) * 1e15;
-			// charge_total->Fill(charge_t);
-			// std::cout << "charge:" << charge_t << std::endl;
+			// // // induced current
+			TCanvas c4("Plots", "Plots", 1000, 1000);
+			c4.cd();
+			det.MipIR(1000);
+			TH1F *Icurrent = (TH1F *)det.sum->Clone();
+			Icurrent->Draw("HIST");
+			Double_t charge_t;
+			charge_t = Icurrent->Integral() * ((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX()) * 1e15;
+			charge_total->Fill(charge_t);
+			std::cout << "charge:" << charge_t << std::endl;
 
-			// std::string output;
-			// output = "out/sic_2021_4_15_ic/sic_events_" + std::to_string(i) + ".C";
-			// const char *out = output.c_str();
-			// c4.SaveAs(out);
+			std::string output;
+			output = "out/sic_2021_4_21_ic/sic_events_" + std::to_string(i) + ".C";
+			const char *out = output.c_str();
+			c4.SaveAs(out);
 
-			// //c4.Update();
+			c4.Update();
 			// //current after electric
-			// TCanvas c5("Plots", "Plots", 1000, 1000);
-			// KElec tct;
-			// tct.preamp(det.sum);
+			TCanvas c5("Plots", "Plots", 1000, 1000);
+			c5.cd();
+			KElec tct;
+			Double_t CSA_thre_time = tct.CSAamp(det.sum, 0.3, 0.6, 75, 10, 0.66, 3);
+			// // taurise=1ns taufall=1ns  detector capacitance=75 pF  CSATransImp=10
+			// // CSA noise=0.66  CSA_threshold=3
+
+			std::cout << "CSA_thre_time:" << CSA_thre_time << std::endl;
+			CSA_time_resolution->Fill(CSA_thre_time);
+			//outfile<<CSA_thre_time<<endl;
+			// //tct.preamp(det.sum);
 			// // tct.CRshape(40e-12, 50, 10000, det.sum);
 			// // tct.RCshape(40e-12, 50, 10000, det.sum);
 			// // tct.RCshape(40e-12, 50, 10000, det.sum);
 			// // tct.RCshape(40e-12, 50, 10000, det.sum);
-			// det.sum->Scale(1000);
-			// det.sum->Draw("HIST");
+			det.sum->Draw("HIST");
 
-			// std::string output_1;
-			// output_1 = "out/sic_2021_4_15_ec/sic_events_" + std::to_string(i)+".C";
-			// const char *out_1 = output_1.c_str();
-			// c5.SaveAs(out_1);
-			// std::cout<<output_1<<std::endl;
+			std::string output_1;
+			output_1 = "out/sic_2021_4_21_ec/sic_events_" + std::to_string(i)+".C";
+			const char *out_1 = output_1.c_str();
+			c5.SaveAs(out_1);
+			std::cout<<output_1<<std::endl;
+			i++;
 
-
-			// i++;
-			// } while (i<1000);
+			} while (i<3000);
 			
-			// ///////////////e-h pairs
-			// TCanvas c6("Plots", "Plots", 1000, 1000);
-			// charge_total->Draw("HIST");
-			// c6.SaveAs("eh_pairs.pdf");
+			///////////////e-h pairs
+			TCanvas c6("Plots", "Plots", 1000, 1000);
+			c6.cd();
+			charge_total->Draw("HIST");
+			c6.SaveAs("eh_pairs.pdf");
+
+			TCanvas c7("Plots", "Plots", 1000, 1000);
+			c7.cd();
+			CSA_time_resolution->Draw("HIST");
+			c7.SaveAs("time_resolution_2021_4_21.pdf");
+			outfile.close();
 
 			// --------------------end---------------
 
 		theApp.Run();
-		 } // End "2D"
+		} // End "2D"
 	}
 
 
 }
  
 #endif
+
+// // Random noise simulation // //
+
+// TRandom3 r;
+// double CSAx1 = 0;
+// //
+// TH1F *charge_total = new TH1F("sim_noise", "sim_noise", 1000, -13, 12);
+// for (int i = 0; i < 300000; i += 1)
+// {
+
+// 	r.SetSeed(0);
+
+// 	CSAx1 = r.Gaus(0.66, 2.36);
+
+// 	charge_total->Fill(CSAx1);
+// 	//
+// }
+// charge_total->Draw();
+
+//endl

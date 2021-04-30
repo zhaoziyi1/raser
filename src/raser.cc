@@ -25,10 +25,12 @@
 #include <TApplication.h> 
 #include <TMath.h> 
 #include <TLine.h> 
-#include <TVector3.h> 
-
-// KDetSim 
-
+#include <TVector3.h>
+#include "TH1.h"
+#include "TRandom3.h"
+#include "TGaxis.h"
+// KDetSim
+using namespace std;
 // nrutil
 // double *dvector(long nl, long nh);
 #define NR_END 1 
@@ -69,6 +71,21 @@ void free_dvector(double *v, long nl, long nh)
 	free((FREE_ARG)(v + nl - NR_END));
 }
 
+float *vector(long nl, long nh)
+/* allocate a float vector with subscript range v[nl..nh] */
+{
+	float *v;
+
+	v = (float *)malloc((size_t)((nh - nl + 1 + NR_END) * sizeof(float)));
+	if (!v)
+		nrerror("allocation failure in vector()");
+	return v - nl + NR_END;
+}
+void free_vector(float *v, long nl, long nh)
+/* free a float vector allocated with vector() */
+{
+	free((FREE_ARG)(v + nl - NR_END));
+}
 /***************************************************** 
 atimes : How to multiply the vector with the matrices 
 Modified in this form by GK 4.10.2012
@@ -254,8 +271,181 @@ void linbcg(unsigned long n, int dim[], double b[], double x[], int itol, double
 	free_dvector(zz,1,n);
 }
 
-// KStruct 
-class KStruct
+Double_t KAlpha(Double_t E, Double_t T, Short_t Charg, Int_t which)
+{
+	// Function calculates impact ionization coefficientf
+	// for a given E [V/um].
+	// Short_t Charg;  ---> Charg=1; holes
+	//                 ---> Charg=-1; electrons
+	// Int_t which;    ---> 0 -> silicon
+	//                 ---> 10 -> diamond Trew parametrization
+	//                 ---> 11 -> diamond Watanabe parametrization
+	//                 ---> 12 -> diamond Hiraiwa parametrization
+
+	Double_t alp, A, B, a = TMath::Sqrt(10), b = TMath::Sqrt(10);
+	switch (which)
+	{
+	case 0: // R.J. R.J. McIntyre, IEEE Trans. Electron Dev. 46 (8) (1999).
+		if (Charg > 0)
+			alp = 1.3e-3 * TMath::Exp(-13.2 * (2e7 / (E * 1e6) - 1));
+		else
+			alp = 2.3e-1 * TMath::Exp(-6.78 * (2e7 / (E * 1e6) - 1));
+		break;
+	case 1: // Van Oversraeten model Solid-State Electronics 1970
+		if (Charg > 0)
+			if (E < 40)
+				alp = 158.2 * TMath::Exp(-203.6 / E);
+			else
+				alp = 67.1 * TMath::Exp(-169.6 / E);
+		else
+			alp = 70.3 * TMath::Exp(-123.1 / E);
+		break;
+	case 2: // Temperature dependence of the impact ionization - Massey
+		// D.J Massey et al., Temperature Dependence of Impact Ionization in Submicrometer Silicon Devices,
+		// IEEE Transactions on Electron Devices, vol. 53, no. 9, September 2006.
+		if (Charg > 0)
+			alp = 113 * TMath::Exp(-(171 + 0.109 * T) / E);
+		else
+			alp = 44.3 * TMath::Exp(-(96.6 + 0.0499 * T) / E);
+		break;
+	case 3: // Chynoweth original 1958 silicon
+		break;
+		//
+
+	case 10:
+		// Trew parametrization
+		A = 1.935e4;
+		B = 7.749e2;
+		alp = A * TMath::Exp(-B / E);
+		break;
+	case 11:
+		// Watanabe parametrization
+		if (Charg > 0)
+		{
+			A = 19.3;
+			B = 4.41e2;
+		}
+		else
+		{
+			A = 46.2;
+			B = 7.59e2;
+		}
+		alp = A * TMath::Exp(-B / E);
+		break;
+	case 12:
+		// Hiraiwa parametrization
+		if (Charg > 0)
+		{
+			A = 19.3 / a;
+			B = 4.41e2 * b;
+		}
+		else
+		{
+			A = 46.2 / a;
+			B = 7.59e2 * b;
+		}
+		alp = A * TMath::Exp(-B / E);
+		break;
+	}
+	return alp;
+}
+// KMaterial
+
+class KMaterial
+{
+private:
+public:
+	static Int_t Mat;			   // Material index
+	static Float_t Temperature;	   // Temperature
+	static Int_t Mobility;		   // mobility model for each material
+	static Int_t ImpactIonization; // impact ionization model
+
+	//////////////////////////////////////////////////////
+
+	KMaterial() { Mat = 1; } // MobMod=1;}
+	~KMaterial(){};
+	static Float_t Perm(Int_t = 1);
+	static Float_t Loss_energy(Int_t = 1);
+	static Int_t MobMod();
+	// ClassDef(KMaterial, 1)
+};
+
+// ClassImp(KMaterial)
+Int_t KMaterial::Mat = 1;
+Float_t KMaterial::Temperature = 293;
+Int_t KMaterial::Mobility = 1;
+Int_t KMaterial::ImpactIonization = 0;
+
+Float_t KMaterial::Perm(Int_t Material)
+{
+	Float_t perm;
+	switch (Material)
+	{
+	case 0:
+		perm = 9.76;
+		break; //silicon
+	case 1:
+		perm = 9.76;
+		break; //poly silicon
+	// case 0:
+	// 	perm = 11.7;
+	// 	break; //silicon
+	// case 1:
+	// 	perm = 11.7;
+	// 	break; //poly silicon
+	case 10:
+		perm = 5.7;
+		break; //diamond
+	case 20:
+		perm = 1;
+		break; //air
+	case 100:
+		perm = 1;
+		break; //aluminium
+	default:
+		perm = 1;
+		break;
+	}
+	return perm;
+}
+Float_t KMaterial::Loss_energy(Int_t Material)
+{
+	Float_t loss_energy;
+	switch (Material)
+	{
+	case 0:
+		loss_energy = 3.6;
+		break; //silicon
+	case 1:
+		loss_energy = 8.4;
+		break; // silicon carbide
+	return loss_energy;
+}
+}
+
+Int_t KMaterial::MobMod()
+{
+	Int_t ret;
+	switch (Mat)
+	{
+	case 0:
+		ret = Mobility;
+		break; //if(Mobility==1) ret=1; else ret=0; break; //silicon
+	case 1:
+		ret = 8;
+		break; //poly silicon
+	case 2:
+		ret = 9;
+		break; //silicon oxide 2.648
+	case 10:
+		ret = 10;
+		break; //diamond
+	}
+	return ret;
+}
+
+// KStruct
+class KStruct 
 
 {
 	public:
@@ -278,6 +468,8 @@ class KStruct
 
 		KStruct();
 		~KStruct(){};
+		void GetCH(TH1F *, Int_t = 0, Float_t = 1, Float_t = -1);		 //,Int_t=200, Float_t=100e-9); Changed from 2.23 -> 3.0
+		Float_t GetCHMult(TH1F *, Int_t = 0, Float_t = 1, Float_t = -1); //,Int_t=200, Float_t=100e-9); Changed from 2.23 -> 3.0
 		void Clear();  
 };
 
@@ -307,10 +499,112 @@ void KStruct::Clear()
 	TCharge = 0;
 }
 
+void KStruct::GetCH(TH1F *histo, Int_t Update, Float_t Mult, Float_t tau)
+{
+	//
+	//
+	//   Float_t tau;  trapping time [s]
 
+	Int_t i;
+	TH1F *his = new TH1F("ch", "Charge Histogram", histo->GetNbinsX(), histo->GetXaxis()->GetXmin(), histo->GetXaxis()->GetXmax());
+	Double_t *ch = new Double_t[Steps + 1];
+	Axis_t *ti = new Axis_t[Steps + 1]; // Changed when migrating from 2.23 to 2.25 or higher
+	for (i = 1; i < Steps + 1; i++)
+	{
+		ch[i] = Charge[i]*e_0;
+		ti[i] = Time[i];
+	}								   // Changed when migrating from 2.23 to 2.25
+	his->FillN(Steps, &ti[1], &ch[1]); // Changed when migrating from 2.23 to 2.25
+	for (i = 1; i < his->GetNbinsX(); i++)
+		his->SetBinContent(i, his->GetBinContent(i) /((histo->GetXaxis()->GetXmax() - histo->GetXaxis()->GetXmin()) / histo->GetNbinsX()));
+	// Trappping is included if tau>0   // added 20.1.2010
+	if (tau > 0)
+	{
+		for (i = 1; i < his->GetNbinsX(); i++)
+			his->SetBinContent(i, his->GetBinContent(i) * TMath::Exp(-(his->GetBinCenter(i) - Time[0]) / tau));
+	}
+	////////////////////////////////////////////////////////
 
+	if (Update)
+	{
+		his->Scale(Mult);
+		histo->Add(his);
+	}
+	else
+	{
+		if (histo)
+			delete histo;
 
+		histo = (TH1F *)histo->Clone("CHGet");
+	}
 
+	delete his;
+	delete[] ti; // Changed when migrating from 2.23 to 2.25
+	delete[] ch; // Changed when migrating from 2.23 to 2.25
+}
+
+Float_t KStruct::GetCHMult(TH1F *histo, Int_t Update, Float_t Mult, Float_t tau)
+{
+	//
+	//
+	//   Float_t tau;  trapping time [s]
+	Double_t dx, dy, dif, dift, sum = 1, summ = 1., mulf, traf;
+	Int_t i;
+	TH1F *his = new TH1F("ch", "Charge Histogram", histo->GetNbinsX(), histo->GetXaxis()->GetXmin(), histo->GetXaxis()->GetXmax());
+	Double_t *ch = new Double_t[Steps + 1];
+	Double_t *Multi = new Double_t[Steps + 1];
+	Axis_t *ti = new Axis_t[Steps + 1]; // Changed when migrating from 2.23 to 2.25 or higher
+
+	for (i = 1; i < Steps + 1; i++)
+	{
+		if (PCharge < 0)
+			dif = KAlpha(0.5 * (Efield[i + 1] + Efield[i]), KMaterial::Temperature, -1, KMaterial::ImpactIonization);
+		else
+			dif = KAlpha(0.5 * (Efield[i + 1] + Efield[i]), KMaterial::Temperature, 1, KMaterial::ImpactIonization);
+
+		dift = Time[i + 1] - Time[i];
+		dx = TMath::Sqrt(TMath::Power((Xtrack[i + 1] - Xtrack[i]), 2) + TMath::Power((Ytrack[i + 1] - Ytrack[i]), 2));
+
+		//---- Calculation of multiplication and trapping factors in given step //
+		mulf = (1 + dif * dx);
+		traf = (1 - dift / tau);
+		MulCar[i] = (mulf - 1) * sum * traf;
+		summ *= mulf;
+		sum *= mulf; // multiplication 8.3.2011
+		if (tau > 0)
+			sum *= traf; // trapping 8.3.2011
+		//---- END ---- //
+
+		ch[i] = Charge[i] * sum;
+		ti[i] = Time[i];
+		// Trappping is included if tau>0   // added 20.1.2010
+		////////////////////////////////////////////////////////
+
+		// printf("%d :: X=%4.1f , Y=%4.1f :: E=%4.2e ::  Time=%4.1e ; Charge=%4.1e ; dif=%5.2e ; MultT=%5.4e Mult=%5.4f hole=%5.3e\n",i,Xtrack[i],Ytrack[i],Efield[i],ti[i],ch[i],dif,sum,summ,MulCar[i]);
+	}
+
+	// Changed ti time when migrating from 2.23 to 2.25
+	his->FillN(Steps, &ti[1], &ch[1]); // Changed when migrating from 2.23 to 2.25
+
+	if (Update)
+	{
+		his->Scale(Mult);
+		histo->Add(his);
+	}
+	else
+	{
+		if (histo)
+			delete histo;
+
+		histo = (TH1F *)histo->Clone("CHMult");
+	}
+
+	delete his;
+	delete[] ti;	// Changed when migrating from 2.23 to 2.25
+	delete[] ch;	// Changed when migrating from 2.23 to 2.25
+	delete[] Multi; // 8.3.2011
+	return summ;
+}
 
 // KGeometry 
 
@@ -339,7 +633,7 @@ TH2F *KHisProject(void *hisIn,Int_t axis,Int_t Bin1)
 	for(i=0;i<=Nx;i++) 
 	{
 		Xbins[i]=his->GetXaxis()->GetBinLowEdge(i+1);
-		//   printf("x:: %d %f\n",i,Xbins[i]);
+		   //printf("x:: %d %f\n",i,Xbins[i]);
 	}
 	for(i=0;i<=Ny;i++) 
 	{
@@ -383,7 +677,6 @@ TH2F *KHisProject(void *hisIn,Int_t axis,Int_t Bin1)
 	return his2D;
 }
 
-
 class KGeometry
 {
 	private:
@@ -408,6 +701,7 @@ class KGeometry
 		TH3F *GetGeom();
 		Float_t GetLowEdge(Int_t);
 		Float_t GetUpEdge(Int_t);
+		Double_t GetStepSize(Int_t, Int_t);
 		//   ClassDef(KGeometry,1) 
 };
 
@@ -482,7 +776,7 @@ void KGeometry::ElRectangle(Float_t *Pos, Float_t *Size, Int_t Wei, Int_t Mat)
 	xpr=EG->GetXaxis()->FindBin(Pos[0]+Size[0]);
 	ypr=EG->GetYaxis()->FindBin(Pos[1]+Size[1]);
 	zpr=EG->GetZaxis()->FindBin(Pos[2]+Size[2]);
-	//	   printf("(%d %d),(%d %d),(%d %d)\n",xpl,xpr,ypl,ypr,zpl,zpr);
+	//printf("(%d %d),(%d %d),(%d %d)\n",xpl,xpr,ypl,ypr,zpl,zpr);
 	// Fill the geometry histogram
 	for(k=zpl;k<=zpr;k++)	   
 		for(j=ypl;j<=ypr;j++)
@@ -716,84 +1010,33 @@ Float_t KGeometry::GetLowEdge(Int_t dir)
 	}
 	return ret;
 }
-
-
-
-
-// KMaterial 
-
-
-class KMaterial
+Double_t KGeometry::GetStepSize(Int_t dir, Int_t i)
 {
-	private:
-	public:
-		static Int_t Mat;              // Material index
-		static Float_t Temperature;    // Temperature
-		static Int_t Mobility;         // mobility model for each material
-		static Int_t ImpactIonization; // impact ionization model
-
-		//////////////////////////////////////////////////////
-
-		KMaterial() { Mat = 1; } // MobMod=1;}
-		~KMaterial(){};
-static Float_t Perm(Int_t = 1);
-static Int_t MobMod();
-// ClassDef(KMaterial, 1)
-};
-
-// ClassImp(KMaterial)
-Int_t KMaterial::Mat = 1;
-Float_t KMaterial::Temperature = 293;
-Int_t KMaterial::Mobility = 1;
-Float_t KMaterial::Perm(Int_t Material)
-{
-	Float_t perm;
-	switch (Material) {
-		case 0:
-			perm = 11.7;
-			break; //silicon
-		case 1:
-			perm = 11.7;
-			break; //poly silicon
-		case 2:
-			perm = 3.9;
-			break; //silicon oxide 2.648
-		case 10:
-			perm = 5.7;
-			break; //diamond
-		case 20:
-			perm = 1;
-			break; //air
-		case 100:
-			perm = 1;
-			break; //aluminium
-		default:
-			perm = 1;
-			break;
-	}
-	return perm;
+  Double_t Lo,Hi;
+  Double_t ret;
+  switch(dir)
+    {
+    case 0:
+      Hi=fabs(EG->GetXaxis()->GetBinCenter(i+1)-EG->GetXaxis()->GetBinCenter(i));
+      Lo=fabs(EG->GetXaxis()->GetBinCenter(i)-EG->GetXaxis()->GetBinCenter(i-1));
+      break;
+    case 1:
+       Hi=fabs(EG->GetYaxis()->GetBinCenter(i+1)-EG->GetYaxis()->GetBinCenter(i));
+       Lo=fabs(EG->GetYaxis()->GetBinCenter(i)-EG->GetYaxis()->GetBinCenter(i-1));
+      break;
+    case 2:
+       Hi=fabs(EG->GetZaxis()->GetBinCenter(i+1)-EG->GetZaxis()->GetBinCenter(i));
+       Lo=fabs(EG->GetZaxis()->GetBinCenter(i)-EG->GetZaxis()->GetBinCenter(i-1));
+      break;
+    default:
+      Hi=-1; Lo=-1;
+      break;
+    }
+  ret=0.5*Hi+0.5*Lo;
+  return ret;
 }
 
 
-Int_t KMaterial::MobMod()
-{
-	Int_t ret;
-	switch (Mat) {
-		case 0:
-			ret = Mobility;
-			break; //if(Mobility==1) ret=1; else ret=0; break; //silicon
-		case 1:
-			ret = 8;
-			break; //poly silicon
-		case 2:
-			ret = 9;
-			break; //silicon oxide 2.648
-		case 10:
-			ret = 10;
-			break; //diamond
-	}
-	return ret;
-}
 
 
 // KField 
@@ -938,11 +1181,16 @@ Int_t KField::CalField()
 					for(q=0;q<=2;q++) 
 					{
 						X[q]=U->GetYaxis()->GetBinCenter(j+q-1);
+						
 						Y[q]=U->GetBinContent(i,j+q-1,k);
-					}
 
+					}
+					//std::cout << "i:" << i << "j:" << j << "k:" << k << std::endl;
+					//std::cout << "X[0]:" << X[0] << "X[1]:" << X[1] << "X[2]:" << X[2] << std::endl;
+					//std::cout << "Y[0]:" << Y[0] << "Y[1]:" << Y[1] << "Y[2]:" << Y[2] << std::endl;
 
 					Ey->SetBinContent(i,j,k,GetFieldPoint(X,Y));
+					// std::cout << GetFieldPoint(X, Y) << std::endl;
 				}
 				// Get Z field
 				if(k==1 || k==nz) Ez->SetBinContent(i,j,k,0); else 
@@ -956,6 +1204,8 @@ Int_t KField::CalField()
 				}
 
 				EE=TMath::Sqrt(TMath::Power(Ex->GetBinContent(i,j,k),2)+TMath::Power(Ey->GetBinContent(i,j,k),2)+TMath::Power(Ez->GetBinContent(i,j,k),2));
+				//std::cout << "i:" << i << "j:" << j << "k:" << k << std::endl;
+				//std::cout << "EX:"<<Ex->GetBinContent(i,j,k)<<",Ey:"<<Ey->GetBinContent(i,j,k)<<",EE:" <<EE<< std::endl;
 				E->SetBinContent(i,j,k,EE);
 
 			}
@@ -965,11 +1215,13 @@ Int_t KField::CalField()
 
 Float_t KField::GetFieldPoint(Float_t *X, Float_t *Y)
 {
+	//electric potential to field
 	Float_t a,b,k12,k23;
 	k12=(Y[0]-Y[1])/(X[0]-X[1]);
 	k23=(Y[1]-Y[2])/(X[1]-X[2]);
 	a=(k23-k12)/(X[2]-X[0]);
 	b=k12-a*(X[0]+X[1]);
+	//std::cout<< "b:" <<b<<"field:"<<2*a*X[1]+b<<std::endl;
 	return 2*a*X[1]+b;
 }
 
@@ -1009,7 +1261,7 @@ void KField::CalFieldXYZ(Float_t x, Float_t y, Float_t z, TVector3 *vec)
 
 Double_t KField::DriftVelocity(Float_t E,Float_t Charg, Float_t T, Double_t Neff, Int_t which)
 {
-	E*=1e4;
+	E*=1e4;//um->cm
 	return(Mobility(E,T,Charg,Neff,which)*(Double_t)E);
 }
 
@@ -1041,33 +1293,10 @@ Double_t KField::Mobility(Float_t E,Float_t T,Float_t Charg,Double_t Neff, Int_t
 	Double_t vsatn,vsatp,vsat;
 	Double_t betap,betan;
 	Double_t alpha;
-
+	//std::cout<<"mobility choose:"<<which<<std::endl;
 	switch(which)
 	{
-		case 0:       
-			alpha=0.72*TMath::Power(T/300,0.065);
-			if(Charg>0)
-			{
-				Double_t ulp=460*TMath::Power(T/300,-2.18);
-				Double_t uminp=45*TMath::Power(T/300,-0.45);      
-				Double_t Crefp=2.23e17*TMath::Power(T/300,3.2);
-				betap=1;
-				vsatp=9.05e6*TMath::Sqrt(TMath::TanH(312/T));
-				lfm=uminp+(ulp-uminp)/(1+TMath::Power(Neff/Crefp,alpha));
-				hfm=2*lfm/(1+TMath::Power(1+TMath::Power(2*lfm*E/vsatp,betap),1/betap));
-			}
-			else
-			{
-				Double_t uln=1430*TMath::Power(T/300,-2); 
-				Double_t uminn=80*TMath::Power(T/300,-0.45);
-				Double_t Crefn=1.12e17*TMath::Power(T/300,3.2);
-				betan=2;      
-				vsatn=1.45e7*TMath::Sqrt(TMath::TanH(155/T));
-				lfm=uminn+(uln-uminn)/(1+TMath::Power(Neff/Crefn,alpha));
-				hfm=2*lfm/(1+TMath::Power(1+TMath::Power(2*lfm*E/vsatn,betan),1/betan));
-			}
-			break;
-		case 1:
+		case 0:
 			//printf("%e ",par[0]);
 			if(Charg>0)
 			{
@@ -1083,7 +1312,58 @@ Double_t KField::Mobility(Float_t E,Float_t T,Float_t Charg,Double_t Neff, Int_t
 				betan=-8.262e-8*TMath::Power(T,3)+6.817e-5*TMath::Power(T,2)-1.847e-2*T+2.429;
 				hfm=lfm/TMath::Power(1+TMath::Power(lfm*E/vsatn,1/betan),betan);
 			}
-			break; 
+			break;
+		//silicon carbide
+		case 1:
+			if (Charg > 0)
+			{
+				// unit cm
+				alpha = 0.34;
+				Double_t ulp = 124 * TMath::Power(T / 300, -2);
+				Double_t uminp = 15.9;
+				Double_t Crefp = 1.76e19;
+				betap = 1.213 * TMath::Power(T / 300, 0.17);
+				vsatp = 2e7 * TMath::Power(T / 300, 0.52);
+				lfm = uminp + ulp/ (1 + TMath::Power(Neff / Crefp, alpha));
+				hfm = lfm / (TMath::Power(1 + TMath::Power(lfm * E / vsatp, betap), 1 / betap));
+			}
+			else
+			{
+				alpha = 0.61;
+				Double_t ulp = 947 * TMath::Power(T / 300, -2);
+				Double_t uminp = 40.0 * TMath::Power(T / 300, -0.5);
+				Double_t Crefp = 1.94e19;
+				betap = 1 * TMath::Power(T / 300, 0.66);
+				vsatp = 2e7 * TMath::Power(T / 300, 0.87);
+				lfm = ulp/ (1 + TMath::Power(Neff / Crefp, alpha));
+				hfm = lfm / (TMath::Power(1 + TMath::Power(lfm * E / vsatp, betap), 1/betap));
+			}
+			break;
+		//silicon
+		// case 1:       
+		// 	alpha=0.72*TMath::Power(T/300,0.065);
+		// 	if(Charg>0)
+		// 	{
+		// 		Double_t ulp=460*TMath::Power(T/300,-2.18);
+		// 		Double_t uminp=45*TMath::Power(T/300,-0.45);      
+		// 		Double_t Crefp=2.23e17*TMath::Power(T/300,3.2);
+		// 		betap=1;
+		// 		vsatp=9.05e6*TMath::Sqrt(TMath::TanH(312/T));
+		// 		lfm=uminp+(ulp-uminp)/(1+TMath::Power(Neff/Crefp,alpha));
+		// 		hfm=2*lfm/(1+TMath::Power(1+TMath::Power(2*lfm*E/vsatp,betap),1/betap));
+		// 	}
+		// 	else
+		// 	{
+		// 		Double_t uln=1430*TMath::Power(T/300,-2); 
+		// 		Double_t uminn=80*TMath::Power(T/300,-0.45);
+		// 		Double_t Crefn=1.12e17*TMath::Power(T/300,3.2);
+		// 		betan=2;      
+		// 		vsatn=1.45e7*TMath::Sqrt(TMath::TanH(155/T));
+		// 		lfm=uminn+(uln-uminn)/(1+TMath::Power(Neff/Crefn,alpha));
+		// 		hfm=2*lfm/(1+TMath::Power(1+TMath::Power(2*lfm*E/vsatn,betan),1/betan));
+		// 	}
+		// 	break;
+ 
 		case 2:   // WF2
 			if(Charg>0)
 			{
@@ -1219,7 +1499,7 @@ class KDetector : public KGeometry, public KMaterial {
 		TH1F *pos;           // contribution of the holes to the total drift current
 		TH1F *neg;           // contribution of the electrons  to the total drift current
 		TH1F *sum;	       // total drift current
-
+		TH1F *pairs;		// e-h pairs each micros
 		// Constructors and destructor
 		KDetector();
 		~KDetector();
@@ -1233,8 +1513,10 @@ class KDetector : public KGeometry, public KMaterial {
 
 		void ShowMipIR(Int_t, Int_t=14, Int_t=1);
 		void ShowUserIonization(Int_t, Float_t *, Float_t *, Float_t *, Float_t *, Int_t=14, Int_t=1);
+		void MipIR(Int_t = 20, Float_t = 0);
 		void Drift(Double_t, Double_t, Double_t, Float_t, KStruct *, Double_t = 0);
-
+  		void SetEntryPoint(Float_t x, Float_t y, Float_t z) {enp[0]=x; enp[1]=y; enp[2]=z;};
+  		void SetExitPoint(Float_t x, Float_t y, Float_t z) {exp[0]=x; exp[1]=y; exp[2]=z;};
 
 
 		//Configuration functions 
@@ -1294,14 +1576,16 @@ void KDetector::SetDriftHisto(Float_t x, Int_t numbins)
 		neg  = new TH1F("charge-","Negative Charge",numbins,0,x); 	
 		if(sum!=NULL) delete sum;
 		sum  = new TH1F("charge","Total Charge",numbins,0,x); 
-
-		sum->SetXTitle("t [s]");  neg->SetXTitle("t [s]"); pos->SetXTitle("t [s]");
-		sum->SetYTitle("I [arb.]");neg->SetYTitle("I [arb.]");pos->SetYTitle("I [arb.]");
+		if(pairs!=NULL) delete pairs;
+		pairs = new TH1F("pairs", "pairs", numbins/5, 0, 150);
+		sum->SetXTitle("t [s]");  neg->SetXTitle("t [s]"); pos->SetXTitle("t [s]"); pairs->SetXTitle("e-h pairs/um");
+		sum->SetYTitle("current [A]");neg->SetYTitle("current [A]");pos->SetYTitle("current [A]"); pairs->SetXTitle("events");
 		sum->GetYaxis()->SetTitleOffset(1.4); neg->GetYaxis()->SetTitleOffset(1.4); pos->GetYaxis()->SetTitleOffset(1.4);
+		pairs->GetYaxis()->SetTitleOffset(1.4);
 		pos->SetLineColor(2);
 		neg->SetLineColor(4);
-		sum->SetLineColor(1);	
-
+		sum->SetLineColor(1);
+		pairs->SetLineColor(6);
 	}
 }
 
@@ -1323,14 +1607,14 @@ KDetector::KDetector()
 	for(Int_t i=0;i<3;i++) B[i]=0;
 
 	// setting up default random generator - diffusion
-	ran=new TRandom(33);  
+	ran=new TRandom3(0);  
 
 	// Calculation parameters
 	CalErr=1e-6;
 	MaxIter=2000;
 
 	// histograms for storing the drift
-	pos=NULL; neg=NULL; sum=NULL;
+	pos=NULL; neg=NULL; sum=NULL; pairs=NULL;
 	SetDriftHisto(25e-9);
 
 	// setting up general variables
@@ -1370,6 +1654,7 @@ KDetector::~KDetector()
 	if(NeffH!=NULL) delete NeffH;
 	if(ran!=NULL) delete ran;
 	if(pos!=NULL) delete pos;
+	if(pairs!=NULL) delete pairs;
 	if(neg!=NULL) delete neg;
 	if(sum!=NULL) delete sum;
 
@@ -1629,7 +1914,7 @@ void KDetector::ShowUserIonization(Int_t div, Float_t *x, Float_t *y, Float_t *z
 	TPolyLine3D *gr3D;
 	Float_t sp[3];
 	int i,j;
-	KStruct seg;
+	KStruct seg;  //???
 	TLine *line;
 	TH3F *hh;
 
@@ -1637,10 +1922,12 @@ void KDetector::ShowUserIonization(Int_t div, Float_t *x, Float_t *y, Float_t *z
 
 	if(EG!=NULL) 
 	{ 
+		
 		if(nz==1) KHisProject(EG,3,how)->Draw("COL");
 		else
 		{
 			//TH3F *hh=GetGeom();
+			
 			hh=GetGeom();
 			hh->SetFillColor(color);
 			hh->Draw("iso");
@@ -1699,6 +1986,161 @@ void KDetector::ShowUserIonization(Int_t div, Float_t *x, Float_t *y, Float_t *z
 		}
 
 	}
+}
+
+void KDetector::MipIR(Int_t div, Float_t lambda)
+{
+	// The simulation of the drift for the laser induced carriers - attenuation of the light.
+	// A track is devided into Int_ div buckets. Each bucket is drifted in the field. The
+	// induced currents for each carrier is calculated as the sum  all buckets.
+	//	Int_t MobMod; mobility model
+	//	Float_t B; magnetic field
+
+	Double_t data[4];
+	Float_t sp[3],sp_2[3];
+	Float_t drift_d; //drift distance each bucket
+	Float_t n_pairs=0,total_pairs=0;
+	Double_t loss_energy=0;
+	Float_t Io, len = 0, lent = 0, lenlam, scalef = 0, pscalef = 0, mule, mulh;
+	int i, j, k, e,mm;
+	KStruct seg, segmul;
+	// silicon
+		
+	if (Perm(0)== Float_t(9.76) ) loss_energy=Loss_energy(1);
+	if (Perm(0) == Float_t(11.7) ) loss_energy = Loss_energy(0);
+		//std::cout << "loss_energy:" << loss_energy << std::endl;
+	TH1F *histop = new TH1F("ch-", "charge+", pos->GetNbinsX(), pos->GetXaxis()->GetXmin(), pos->GetXaxis()->GetXmax()); //2.23 -> 3.0
+	TH1F *histon = new TH1F("ch+", "charge-", neg->GetNbinsX(), neg->GetXaxis()->GetXmin(), neg->GetXaxis()->GetXmax());
+	sum->Reset();
+	pos->Reset();
+	neg->Reset();
+	pairs->Reset();
+
+
+	/////////////////////////////////////////////////////////////////
+	// If there is no attenuation coefficient we consider that as mip
+	/////////////////////////////////////////////////////////////////
+	TFile Myf("Geant_Vin.root");
+	TH1F *EDist;
+	EDist = (TH1F *)Myf.Get("Silicon_Vin");
+
+	if (lambda != 0)
+	{
+		for (k = 0; k < 3; k++)
+			lent += TMath::Power(exp[k] - enp[k], 2);
+		lent = TMath::Sqrt(lent);
+		lenlam = lent / lambda;
+		Io = div / (lambda * (1 - TMath::Exp(-lenlam)));
+
+			//     if(Debug)
+			//  printf("Calculated length=%f um, lenDIVlamda=%f, I0=%f \n", lent,lenlam,Io );
+	}
+	/////////////////////////////////////////////////////////////////
+
+	for (i = 0; i < div-1; i++)
+	{
+		for (j = 0; j < 3; j++)
+		{
+			sp[j] = ((exp[j] - enp[j]) / div) * i + enp[j] + (exp[j] - enp[j]) / (2 * div);
+		}
+		for (j = 0; j < 3; j++)
+		{
+			sp_2[j] = ((exp[j] - enp[j]) / div) * (i+1) + enp[j] + (exp[j] - enp[j]) / (2 * div);
+		}
+		//     printf("#i=%d div=%d, pointx=%f, pointy=%f pointz=%f \n",i,div,sp[0],sp[1],sp[2]);
+		drift_d = TMath::Sqrt(TMath::Power(sp_2[0]-sp[0], 2) + TMath::Power(sp_2[1]-sp[1], 2)+ TMath::Power(sp_2[2]-sp[2], 2));
+		gRandom = new TRandom3(0);
+		float ran_pairs = EDist->GetRandom();
+		n_pairs =drift_d*ran_pairs*1e6/(5*loss_energy)*1.582;
+		total_pairs+=n_pairs;
+		//1.582 is change silicon loss energy to silicon carbide 
+		// if (i<10) std::cout<<"drift_d:"<<drift_d<<std::endl;
+		// if (i<10) std::cout<<"loss_energy:"<<loss_energy<<std::endl;
+		// if (i<10) std::cout<<"n_pairs:"<<n_pairs<<std::endl;
+			//if (mm==0) std::cout<<"n_pairs:"<<n_pairs<<std::endl;
+		for (j = 0; j < average; j++)
+		{
+
+			Drift(sp[0], sp[1], sp[2], 1, &seg);
+			seg.GetCH(histop, 1, 1, tauh);
+			Drift(sp[0], sp[1], sp[2], -1, &seg);
+
+			if (MTresh > 1)
+			{
+				mule = seg.GetCHMult(histon, 1, 1, taue); // performing multiplication
+															//      if(Debug)  printf(":: Mstep = %f ::",mule);
+			}
+			else
+				seg.GetCH(histon, 1, 1, taue);
+
+			if (mule > MTresh && MTresh > 1) //if the multiplication is large enough then do the hole tracking
+			{
+				for (e = 1; e < seg.Steps + 1; e++)
+				{
+					Drift(seg.Xtrack[e], seg.Ytrack[e], seg.Ztrack[e], 1, &segmul, seg.Time[e]);
+					mulh = segmul.GetCHMult(histop, 1, seg.MulCar[e], tauh);
+					if (mulh > BDTresh && Debug)
+					{
+						printf("HOLE MULTIPLICATION - BREAKDOWN\n");
+						BreakDown = 1;
+					}
+				}
+			}
+		}
+		histop->Scale(n_pairs);
+		histon->Scale(n_pairs);
+
+		///////////////////////////////////////////////////////////////////
+		// If there is no attenuation coefficient we consider that as mip//
+		// Changes made by GK 3.3.2020                                 ////
+		///////////////////////////////////////////////////////////////////
+		if (lambda != 0)
+		{
+			len = 0;
+			for (k = 0; k < 3; k++)
+				len += TMath::Power(sp[k] - enp[k], 2);
+			len = TMath::Sqrt(len);
+			scalef = Io * TMath::Exp(-len / lambda) * SStep;
+			//printf("step=%d ::  len=%f um, scalef=%f pscalef=%f\n",i,len,scalef,pscalef);
+			histon->Scale(scalef);
+			histop->Scale(scalef);
+			pscalef += scalef;
+			histop->Scale(lent / div);
+			histon->Scale(lent / div);
+		}
+		/////////////////////////////////////////////////////////////////////////////////
+		pairs->Fill(ran_pairs*1e6/(5*loss_energy)*1.582);
+		pos->Add(histop);
+		neg->Add(histon);
+		histop->Reset();
+		histon->Reset();
+		
+	}
+
+	/// total laudau distribution
+	float d = TMath::Sqrt(TMath::Power((exp[0] - enp[0]), 2) + TMath::Power((exp[1] - enp[1]), 2) + TMath::Power((exp[2] - enp[2]), 2));
+	float mpv = (0.027 * log(d) + 0.126)*1.582; //keV/micron ==> log base "e"
+	float FWHM = 0.31 * pow(d, -0.19);	   // this is the FWHM keV/micron, 4 times the sigma parameter in root.
+	float DA = FWHM / 4.;
+	TRandom3 Lan;
+	TDatime *time; // current time
+	time = new TDatime();
+	Lan.SetSeed(time->TDatime::GetTime());
+	float LanConst = 0;
+	LanConst = Lan.Landau(mpv, DA);
+
+	if (LanConst > 5. * mpv)
+		LanConst = Lan.Landau(mpv, DA);
+	LanConst *=1000/loss_energy*d;
+
+	pos->Scale(1/total_pairs*LanConst);
+	neg->Scale(1/total_pairs*LanConst);
+	
+	sum->Add(neg);
+	sum->Add(pos);
+
+	delete histop;
+	delete histon;
 }
 
 void KDetector::Drift(Double_t sx, Double_t sy, Double_t sz, Float_t charg, KStruct *seg, Double_t t0)
@@ -1788,9 +2230,8 @@ void KDetector::Drift(Double_t sx, Double_t sy, Double_t sz, Float_t charg, KStr
 		if(DM!=NULL)
 			KMaterial::Mat=DM->GetBinContent(DM->FindBin(cx,cy,cz)); 
 		else KMaterial::Mat=0;
-
-		//      EEN=Real->CalFieldXYZ(cx+deltacx,cy+deltacy,cz+deltacz); // get field & velocity at new location //12.9.2018
-		Real->CalFieldXYZ(cx+deltacx,cy+deltacy,cz+deltacz,EEN); // get field & velocity at new location
+						 //      EEN=Real->CalFieldXYZ(cx+deltacx,cy+deltacy,cz+deltacz); // get field & velocity at new location //12.9.2018
+		Real->CalFieldXYZ(cx + deltacx, cy + deltacy, cz + deltacz, EEN); // get field & velocity at new location
 		vel=Real->DriftVelocity( (EEN->Mag()+EE->Mag())/2,charg,Temperature,TMath::Abs(NeffF->Eval(cx,cy,cz)),MobMod());
 
 		//printf("Calculate vel: %e EEN = %e ::: ",vel, EEN->Mag());
@@ -1893,18 +2334,17 @@ void KDetector::Drift(Double_t sx, Double_t sy, Double_t sz, Float_t charg, KStr
 
 
 
-// K3D 
+// K3D
 
-
+#include "Rtypes.h"
 #include "TArray.h"
 #include "TArrayI.h"
 #include "TArrayF.h"
 #include "TGraph.h"
 #include <stdio.h>
 #include <stdlib.h>
-//#include "KStruct.h"
 #include "TMinuit.h"
-// #include "KDetector.h"
+
 
 
 class K3D : public KDetector
@@ -1988,6 +2428,7 @@ void K3D::SetUpVolume(Float_t St1, Float_t St2)
 	EG->GetZaxis()->SetTitle("z [#mum]");
 
 	GetGrid(EG, 1);
+	//printf("nz：%i\n", nz);
 }
 
 void K3D::SetUpColumn(Int_t n, Float_t posX, Float_t posY, Float_t R, Float_t Depth, Short_t Wei, Short_t Mat)
@@ -2024,6 +2465,249 @@ void K3D::SetUpElectrodes(Int_t back)
 }
 
 
+// KPad
+#define JMAX 40
+class KPad : public KDetector
+{
+private:
+//Runge Kutta method for solving the field
+  void           rk4(float *,float *,int,float,float,float*); 
+  Float_t        rtbis(float, float, float);
+  Float_t        PoEqSolve(Float_t);
+  void           Derivs(float x,float *,float *);
+  TArrayF PhyPot;       //electric potential
+  TArrayF PhyField;     //electric field 
+public:
+   TF1     *Neff;   // effective dopping concentration 
+   Float_t CellY;   // thickness of the diode
+   Float_t CellX;   // width of the diode
+
+   KPad(Float_t=50,Float_t=301);
+  ~KPad(); 
+   	void SetUpVolume(Float_t,Int_t =0); 
+	void SetUpElectrodes();
+	void GetRamoField();
+	void GetField();
+	TGraph   *DrawPad(char*);
+};
+
+KPad::KPad(Float_t x,Float_t y)
+{
+  	//Constructor of the class KPad:
+  	//		Float_t x ; width of the diode in um. For the simulation it is not neccessary to put real dimensions
+  	//		Float_t y ; thickness in um
+ 	Neff=NULL;
+  	CellX=x;  CellY=y;
+}
+ 
+KPad::~KPad()
+{
+}
+
+void KPad::Derivs(float x, float y[], float dydx[])
+{
+	//Double_t permMat=(material==0)?perm:permDi;
+	Double_t permMat = Perm(KMaterial::Mat);
+	Double_t permV = perm0 * 1e-6;
+	;
+	dydx[1] = y[2];
+	dydx[2] = -Neff->Eval(x) * e_0 / (permMat * permV);
+	// if(x>150) dydx[2]*=permMat;
+}
+
+Float_t KPad::PoEqSolve(Float_t der)
+{
+	//TArrayF PhyField(ny+2);
+	//TArrayF PhyPot(ny+2);
+	//Float_t Step=1;
+
+	Int_t i;
+	Float_t h, x = 0;
+
+	Float_t y[3], dydx[3], yout[3];
+
+	y[1] = Voltage;
+	y[2] = der;
+	PhyField[0] = y[2];
+	PhyPot[0] = y[1];
+	
+	Derivs(x, y, dydx);
+	
+	for (i = 1; i <= ny; i++)
+	{
+		h = GetStepSize(1, i);
+		rk4(y, dydx, 2, x, h, yout);
+		//printf("%f %f %f\n",x+h,yout[1],yout[2]);
+		y[1] = yout[1]; //electric potential
+		y[2] = yout[2];	// electric filed
+		PhyField[i] = y[2];
+		PhyPot[i] = y[1];
+		//std::cout << "x:" << x << ",y[x]:" << y[1] << "," << y[2] << std::endl;
+		x = x + h;
+		Derivs(x, y, dydx);
+		
+	}
+	//     printf("y[1]=%f\n",xp1);
+	return y[1];
+}
+
+void KPad::SetUpVolume(Float_t St1, Int_t Mat)
+{
+  	nx=(Int_t) (CellX/St1);
+  	ny=(Int_t) (CellY/St1);
+  	nz=1;
+  	//Set the boundary condition matrix //
+  	EG=new TH3I("EG","EG",nx,0,CellX,ny,0,CellY,1,0,1);
+  	EG->GetXaxis()->SetTitle("x [#mum]");
+  	EG->GetYaxis()->SetTitle("y [#mum]");
+
+  	DM=new TH3I("DM","DM",nx,0,CellX,ny,0,CellY,1,0,1);
+  	DM->GetXaxis()->SetTitle("x [#mum]");
+  	DM->GetYaxis()->SetTitle("y [#mum]");
+  	for(int i=0;i<nx;i++) 
+     	for(int j=0;j<ny;j++)
+        	DM->SetBinContent(i,j,1,Mat);
+}
+
+void KPad::SetUpElectrodes()
+{
+ 
+ 	for(int i=1;i<=nx;i++){ EG->SetBinContent(i,1,1,2);  EG->SetBinContent(i,ny,1,16385);} 
+ 	// KMaterial::Mat=10;
+  	//Default track
+ 	// enp[0]=CellX/2;  exp[0]=enp[0];
+ 	// enp[1]=1;        exp[1]=CellY;
+
+ 	if(Neff!=NULL )
+ 	{
+		GetField();
+		GetRamoField();
+ 	}
+ 	else 
+   		printf("Please define space charge function Neff before field calculation\n");
+ 
+}
+
+Float_t KPad::rtbis(float x1, float x2, float xacc)
+{
+	void nrerror(char error_text[]);
+	int j;
+	float dx, f, fmid, xmid, rtb;
+
+	f = PoEqSolve(x1);
+	fmid = PoEqSolve(x2);
+	if (f * fmid >= 0.0)
+		nrerror("Root must be bracketed for bisection in rtbis");
+	rtb = f < 0.0 ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
+	for (j = 1; j <= JMAX; j++)
+	{
+		//xmid find a good electric field intial value
+		fmid = PoEqSolve(xmid = rtb + (dx *= 0.5));
+		// fmid is the electric field at the readout electrodes
+		if (fmid <= 0.0)
+			rtb = xmid;
+		if (fabs(dx) < xacc || fmid == 0.0)
+			return rtb;
+	}
+	nrerror("Too many bisections in rtbis");
+	return 0.0;
+}
+void KPad::rk4(float y[], float dydx[], int n, float x, float h, float yout[])
+{
+	float *vector(long, long);
+	void free_vector(float *, long, long);
+	int i;
+	float xh, hh, h6, *dym, *dyt, *yt;
+
+	dym = vector(1, n);
+	dyt = vector(1, n);
+	yt = vector(1, n);
+	hh = h * 0.5;
+	h6 = h / 6.0;
+	xh = x + hh;
+	for (i = 1; i <= n; i++)
+		yt[i] = y[i] + hh * dydx[i];
+	Derivs(xh, yt, dyt);
+	for (i = 1; i <= n; i++)
+		yt[i] = y[i] + hh * dyt[i];
+	Derivs(xh, yt, dym);
+	for (i = 1; i <= n; i++)
+	{
+		yt[i] = y[i] + h * dym[i];
+		dym[i] += dyt[i];
+	}
+	Derivs(x + h, yt, dyt);
+	for (i = 1; i <= n; i++)
+		yout[i] = y[i] + h6 * (dydx[i] + dyt[i] + 2.0 * dym[i]);
+	free_vector(yt, 1, n);
+	free_vector(dyt, 1, n);
+	free_vector(dym, 1, n);
+}
+
+void KPad::GetRamoField()
+{
+	Int_t i, j;
+	Double_t *x = new Double_t[nx * ny + 1];
+	for (j = 1; j <= ny; j++)
+	{
+		for (i = 1; i <= nx; i++)
+		{
+			x[i + (j - 1) * nx] = (Double_t)(j - 1) / (Double_t)(ny - 1);
+			
+		}
+	}
+	Ramo->U = MapToGeometry(x);
+	Ramo->CalField();
+	delete[] x;
+}
+
+void KPad::GetField()
+{
+	Int_t i, j;
+	//Float_t Step=1;
+	Float_t aa;
+	PhyPot = TArrayF(ny + 2);
+	PhyField = TArrayF(ny + 2);
+	Double_t *x = new Double_t[nx * ny + 1];
+	//TArrayD PhyPot2D(nx*ny+1);
+	//TArrayI StripPosition=TArrayI(2); StripPosition[0]=1; StripPosition[1]=nx;
+
+	aa = rtbis(-100, 100, 0.000001);
+	//if(!Invert && GetDepletionVoltage()>Voltage) aa=rtbis(1,300,0.000001); else aa=rtbis(-10,10,0.000001);
+
+	for (j = 1; j <= ny; j++)
+		for (i = 1; i <= nx; i++)
+		{
+			x[i + (j - 1) * nx] = (Double_t)PhyPot[j - 1];
+		}
+	//Real=EField(PhyPot2D,nx,ny);
+	//Real->CalField(Step,1);
+
+	// for(i=0;i<nx*ny+1;i++)     {printf("%f ",PhyPot2D[i]); if(i%nx==0) printf("\n");}
+
+	Real->U = MapToGeometry(x);
+	Real->CalField();
+	delete[] x;
+}
+
+TGraph *KPad::DrawPad(char *option)
+{
+  //Draws potential "p" or  electric field "f"
+	Char_t Opt[10];
+	TGraph *gr;
+	TArrayF xx=TArrayF(ny+1);
+ 	for(Int_t i=0;i<=ny;i++) xx[i]=(Float_t)i*GetStepSize(1,i);
+
+	if(strchr(option,'p')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyPot.GetArray());
+	if(strchr(option,'f')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyField.GetArray());
+	if(strchr(option,'s')!=NULL) sprintf(Opt,"CP"); else  sprintf(Opt,"ACP"); 
+	//if(! strcmp(option,"p")) gr=new TGraph(ny,xx.GetArray(),PhyPot.GetArray());
+	//if(! strcmp(option,"f")) gr=new TGraph(ny,xx.GetArray(),PhyField.GetArray());
+	gr->Draw(Opt);
+	gr->GetHistogram()->Draw();
+	gr->Draw(Opt);
+	return gr;
+}
 
 
 void set_root_style(int stat=1110, int grid=0){
@@ -2153,110 +2837,647 @@ TCanvas* drawIV(std::vector<TString> inputFiles){
 	c->Update(); 
 	return c;
 }
+#define EXPORT
 
+class EXPORT KElec
+{
+private:
+	Int_t Method;
+	Double_t Cp;
+	Double_t Rp;
+	Double_t Crc;
+	Double_t R1rc;
+	Double_t R2rc;
+	Double_t Ccr;
+	Double_t R1cr;
+	Double_t R2cr;
+	Double_t PeakTime;
+	Double_t IntTime;
+
+public:
+	KElec(Double_t = 5e-12, Double_t = 50, Double_t = 25e-9, Double_t = 1e-12, Double_t = 200, Double_t = 200, Double_t = 1e-12, Double_t = 200, Double_t = 200, Double_t = 25e-9, Int_t = 0);
+	virtual ~KElec();
+	Double_t Trapez(TH1F *, Int_t, Double_t);
+	Double_t Simpson(TH1F *, Int_t, Double_t);
+	void preamp(TH1F *his) { preamp(Cp, Rp, his, IntTime, Method); };
+	void preamp(Double_t, Double_t, TH1F *, Double_t = -1111, Int_t = 0);
+	void RCshape(Double_t, Double_t, Double_t, TH1F *, Int_t = 0);
+	void CRshape(Double_t, Double_t, Double_t, TH1F *, Int_t = 0);
+	Double_t CSAamp(TH1F *his, Double_t, Double_t, Double_t, Double_t, Double_t, Double_t);
+};
+
+
+
+KElec::KElec(Double_t x1, Double_t x2, Double_t x3, Double_t x4, Double_t x5, Double_t x6, Double_t x7, Double_t x8, Double_t x9, Double_t x10, Int_t met)
+{
+	Cp = x1;
+	Rp = x2;
+	IntTime = x3;
+	Crc = x4;
+	R1rc = x5;
+	R2rc = x6;
+	Ccr = x7;
+	R1cr = x8;
+	R2cr = x9;
+	PeakTime = x10;
+	Method = met;
+}
+KElec::~KElec()
+{
+	//Clear();
+}
+
+Double_t KElec::CSAamp(TH1F *histo, Double_t TRise, Double_t TFall, Double_t C_detector, Double_t CSATransImp, Double_t CSA_Noise, Double_t CSAVth)
+{
+	//test graph//
+	TH1F *whisto = new TH1F();
+	histo->Copy(*whisto);
+	//test graph //
+
+	int IMaxSh=histo->GetNbinsX();
+	int Step=1;
+	int DStep = Step;
+	float Qdif_Shaper = 0;
+	double *itot = new double[IMaxSh];
+	double *PreAmp_Q = new double[IMaxSh];
+	double *ShaperOut_Q = new double[IMaxSh];
+	double *ShaperOut_V = new double[IMaxSh];
+	double TauRise = TRise / 2.2*1e-9;
+	double TauFall = TFall / 2.2*1e-9;
+	double sh_max = 0.0;
+	double sh_min = 0.0;
+	int NMax_sh = 0;
+	int Nmin_sh = 0;
+	double thre_time=0.0;
+
+	double qtot=0;
+	int SC_CSAOn=1;
+
+
+
+	if(TauRise == TauFall) TauRise *= 0.9;
+
+
+	double TIMEUNIT=(histo->GetXaxis()->GetXmax() - histo->GetXaxis()->GetXmin()) / histo->GetNbinsX();
+	
+
+	for (int k=0;k<IMaxSh;k++)
+ 	{
+		PreAmp_Q[k]=0.0;
+		itot[k]=0.0;
+		ShaperOut_Q[k]=0.0;
+		ShaperOut_V[k]=0.0;
+	}
+
+	//get the induced charge anc current
+	for (int i = 0; i < IMaxSh - Step; i += Step)
+	{
+		if (i > 0)
+		{
+			PreAmp_Q[i] = 0;
+			itot[i]=histo->GetBinContent(i);
+			PreAmp_Q[i] = itot[i] * TIMEUNIT;
+			qtot += itot[i] * TIMEUNIT;
+			//histo->SetBinContent(i,PreAmp_Q[i]);   // induced charge each step
+		}
+		else if (i == 0)
+		{
+			PreAmp_Q[i] = 0; // final scale to zero
+			//histo->SetBinContent(i, PreAmp_Q[i]);
+		}
+		// Iout_temp reproduces correctly Speiler pag 127//
+	}
+
+	// get the CSA charge.   transfer induced charge to CAS charge
+	for (int i = 0; i < IMaxSh - Step; i += Step)
+	{
+		Qdif_Shaper = PreAmp_Q[i];
+
+		if (Qdif_Shaper !=0)
+			for (int ll = 0; ll<IMaxSh-i;ll+=Step)  // valid only up to IMaxSh 
+			{
+				ShaperOut_Q[i+ll] += TauFall/(TauFall+TauRise)*Qdif_Shaper*		    
+				(TMath::Exp(-ll*TIMEUNIT/TauFall)-TMath::Exp(-ll*TIMEUNIT/TauRise));					 			
+			}
+		if (fabs(ShaperOut_Q[i]) > fabs(sh_max))
+		{
+			sh_max = ShaperOut_Q[i];
+		}
+		
+	}
+
+
+	//TOFFEE_gain  change charge to amplitude ??
+	double Ci = 500 * 70*1E-15;
+	double Qfrac = 1. / (1. + C_detector * 1E-12 / Ci);
+	for (int i = 0; i < IMaxSh; i += Step)
+	{
+		if (SC_CSAOn)
+			ShaperOut_V[i] = ShaperOut_Q[i] * CSATransImp * 1e15 * qtot / sh_max; // [mV/fQ *Q/Q]
+		else
+			ShaperOut_V[i] = ShaperOut_Q[i] * CSATransImp * 1e15 * qtot * Qfrac / sh_max; // [mV/fQ *Q/Q]											  //cout << ShaperOut_V[i] << endl;
+		histo->SetBinContent(i, fabs(ShaperOut_V[i]));
+	}
+
+	sh_max = 0.;
+
+	for (int i=Step;i<IMaxSh-2*Step;i+=Step)
+	{	
+		if (ShaperOut_V[i]> sh_max) 
+		{
+			sh_max = ShaperOut_V[i];		    
+			NMax_sh = i;
+		}
+	
+		if ( ShaperOut_V[i] < sh_min) 
+		{
+			sh_min = ShaperOut_V[i];		    
+			Nmin_sh = i;
+		}
+	}
+	// // CSA noise
+
+	int NCSA_der0 = 0;
+	double CSAx1 = 0;
+	double CSAx2 = 0;
+	double Jitter = 0;
+	bool FVTh = true;
+	float DT = (TIMEUNIT*1e9*2.*DStep);
+	double STime = 0;
+
+	NCSA_der0 = (fabs(sh_max) > fabs(sh_min)) ? NMax_sh : Nmin_sh;
+
+	TRandom3 r;
+	r.SetSeed(0);
+	CSAx1 = r.Gaus(CSA_Noise,2.36);
+	
+	//histo->Reset();
+
+	for (int i = 2 * DStep; i < IMaxSh - 2 * DStep; i++)
+	{
+		if ((fabs(ShaperOut_V[i]) + CSAx1) > fabs(CSAVth) && FVTh && i < NCSA_der0 - 20)
+		{
+			Jitter = 0;
+			FVTh = false;
+			STime = (double)(i)*TIMEUNIT * 1e9;
+			float dVdt = fabs(ShaperOut_V[i + DStep] - ShaperOut_V[i - DStep]) / DT; //mV/nSec											 //mV /nSec
+			float Jit = 0;
+			if (dVdt != 0)
+			{
+				Jitter = CSA_Noise / dVdt; // in ns
+				Jit = gRandom->Gaus(0, Jitter);
+			}
+			thre_time=STime+Jit;
+		}
+	}
+	//record the waveform above the threshold
+	// if (!FVTh)
+	// {
+	// 	for (int i = 2 * DStep; i < IMaxSh - 2 * DStep; i++)
+	// 	{
+	// 		CSAx2 = r.Gaus(CSA_Noise, 2.36);
+	// 		//histo->SetBinContent(i,fabs(ShaperOut_V[i]) + CSAx2);
+	// 	}
+	// }
+
+	delete whisto;
+	return thre_time;
+	}
+
+void KElec::preamp(Double_t C, Double_t R, TH1F *histo, Double_t cut, Int_t method)
+{
+	//static double e_0 = 1.60217733e-19;
+	Double_t suma = 0;
+	Double_t tau = R * C;
+	Double_t t;
+	Int_t i;
+	TH1F *whisto = new TH1F();
+	histo->Copy(*whisto);
+
+	if (cut == -1111)
+		cut = histo->GetNbinsX() * histo->GetBinWidth(1);
+
+	for (i = 1; i < histo->GetNbinsX() - 1; i++)
+	{
+		t = whisto->GetBinCenter(i);
+		if (t <= cut)
+		{
+			if (method == 0)
+				suma += Trapez(whisto, i, tau);
+			if (method == 1)
+				suma += Simpson(whisto, i, tau);
+		}
+		histo->SetBinContent(i, (Float_t)(1 / C * suma * TMath::Exp(-t / tau)));
+		// printf("%d,t=%e,suma=%e,tau=%e,tapez=%e\n",i,t,suma,tau,Trapez(histo,i,tau));
+	}
+	delete whisto;
+}
+
+Double_t KElec::Trapez(TH1F *histo, Int_t i, Double_t tau)
+{
+	Double_t f1 = 0, f2 = 0, h = 0, t1 = 0, t2 = 0;
+	if (i == 1)
+		return (histo->GetBinContent(i) * histo->GetBinWidth(i) / 2);
+	else
+	{
+		t1 = histo->GetBinCenter(i - 1);
+		f1 = histo->GetBinContent(i - 1) * TMath::Exp(t1 / tau);
+		t2 = histo->GetBinCenter(i);
+		f2 = histo->GetBinContent(i) * TMath::Exp(t2 / tau);
+		h = histo->GetBinWidth(i); //printf("tutut %d,t1=%e,t2=%e,f1=%e,f2=%e\n",i,t1,t2,f1,f2);
+		return (h * 0.5 * (f1 + f2));
+	}
+}
+
+Double_t KElec::Simpson(TH1F *histo, Int_t i, Double_t tau)
+{
+	Double_t f1 = 0, f2 = 0, f3 = 0, h = 0, t1 = 0, t2 = 0, t3 = 0;
+	if (i < 3 || i % 2 == 0)
+		return (Trapez(histo, i, tau));
+	else
+	{
+		h = histo->GetBinWidth(i);
+		t1 = histo->GetBinCenter(i - 2);
+		f1 = histo->GetBinContent(i - 2) * TMath::Exp(t1 / tau);
+		t2 = histo->GetBinCenter(i - 1);
+		f2 = histo->GetBinContent(i - 1) * TMath::Exp(t2 / tau);
+		t3 = histo->GetBinCenter(i);
+		f3 = histo->GetBinContent(i) * TMath::Exp(t3 / tau);
+		return (h * (0.33333333333 * f1 + 1.333333333 * f2 + 0.3333333333333 * f3) - Trapez(histo, i - 1, tau));
+	}
+}
+
+void KElec::RCshape(Double_t C, Double_t R1, Double_t R2, TH1F *histo, Int_t method)
+{
+	Double_t suma = 0;
+	Double_t tau = (R1 * R2) * C / (R1 + R2);
+	Double_t tau1 = R1 * C;
+	Double_t t;
+	Int_t i;
+	TH1F *whisto = new TH1F();
+	histo->Copy(*whisto);
+
+	for (i = 1; i < histo->GetNbinsX() - 1; i++)
+	{
+		t = whisto->GetBinCenter(i);
+		if (method == 0)
+			suma += Trapez(whisto, i, tau);
+		if (method == 1)
+			suma += Simpson(whisto, i, tau);
+		histo->SetBinContent(i, (Float_t)(1 / tau1 * suma * TMath::Exp(-t / tau)));
+	}
+	delete whisto;
+}
+
+void KElec::CRshape(Double_t C, Double_t R1, Double_t R2, TH1F *histo, Int_t method)
+{
+	Double_t suma = 0;
+	Double_t tau = (R1 * R2) * C / (R1 + R2);
+	Double_t tau1 = R1 * C;
+	Double_t t, f;
+	Int_t i;
+	TH1F *whisto = new TH1F();
+	histo->Copy(*whisto);
+
+	for (i = 1; i < histo->GetNbinsX() - 1; i++)
+	{
+		t = whisto->GetBinCenter(i);
+		f = whisto->GetBinContent(i);
+		if (method == 0)
+			suma += Trapez(whisto, i, tau);
+		if (method == 1)
+			suma += Simpson(whisto, i, tau);
+		histo->SetBinContent(i, f - (1 / tau - 1 / tau1) * suma * TMath::Exp(-t / tau));
+	}
+	delete whisto;
+}
 
 #ifndef __CINT__ 
 
 void print_usage(){
-	printf("NAME\n\tdrawIV - draw IV curves from log files\n");
-	printf("\nSYNOPSIS\n\tdrawIV [-b] [-h] file1 file2 ...\n");
+	printf("NAME\n\traser - REdiation SEmiconductoR\n");
+	printf("\nSYNOPSIS\n\traser arg ...\n");
 	printf("\nOPTIONS\n");
 	printf("\t%-5s  %-40s\n", "-h", "Print this message");
-	printf("\t%-5s  %-40s\n", "-b", "Batch mode, save to pdf file directly");
-	printf("\nAUTHOR\n\tXin Shi <Xin.Shi@cern.ch>\n");
+	printf("\t%-5s  %-40s\n", "3D", "3D KDetSim");
+	printf("\t%-5s  %-40s\n", "2D", "2D KDetSim");
+	printf("\nAUTHOR\n\tXin Shi <shixin@ihep.ac.cn>\n");
 }
+
 
 int main(int argc, char** argv) {
 
-	/*
-	if (argc < 2) {
-		print_usage() ;  
-		return -1; 
+	if (argc < 2)
+	{
+		print_usage();
+		return -1;
 	}
-
-	//    K3D *det = new K3D(7, 80, 80, 300);
-
-	bool doBatch(false);
-	std::vector<TString> inputFiles(argv+1, argv+argc);
-	TString outFile = "test.pdf";
-
-	for (int i = 0; i < argc; i++){
-		if (!strcmp(argv[i], "-h")) {
-			print_usage();
-			break; 
-		}
-
-		if (!strcmp(argv[i], "-b")) {
-			doBatch = true;
-			inputFiles.erase(inputFiles.begin()+i-1);
-		}
-	}
-
-	if (doBatch) { 
-		std::cout << "Run in batch mode ... " << std::endl;
-		TCanvas *c = drawIV(inputFiles);
-		c->SaveAs(outFile);
-		delete c;
-		gSystem->Exit(0);
-	}
-	*/
 
 	TApplication theApp("App", 0, 0);
 	theApp.SetReturnFromRun(true);
-	//drawIV(inputFiles); 
-
-	// Start the Test3D_SiC_One
 	gStyle->SetCanvasPreferGL(kTRUE);
-	// define a 3D detector with 5 electrodes
-	// x=100 , y is 50 and thickness 120
-	K3D *det = new K3D(7, 80, 80, 300);
-	det->Voltage = 50;  
-	// define the drift mesh size and simulation mesh size in microns
-	det->SetUpVolume(1, 4);
-	// define  columns #, postions, weigthing factor 2=0 , material Al=1
-	det->SetUpColumn(0, 40, 15, 4, 280, 2, 1);
-	det->SetUpColumn(1, 40, 65, 4, 280, 2, 1);
-	det->SetUpColumn(2, 61.65, 27.5, 4, 280, 2, 1);
-	det->SetUpColumn(3, 61.65, 52.5, 4, 280, 2, 1);
-	det->SetUpColumn(4, 18.35, 27.5, 4, 280, 2, 1);
-	det->SetUpColumn(5, 18.35, 52.5, 4, 280, 2, 1);
-	det->SetUpColumn(6, 40, 40, 4, -280, 16385, 1);
-	det->Temperature = 300;
-	det->SetDriftHisto(1.2e-9, 36);
-	Float_t Pos[3] = {80, 80, 1};
-	Float_t Size[3] = {80, 80, 2};
-	det->ElRectangle(Pos, Size, 0, 20);  ///how to use?
 
-	det->SetUpElectrodes();
-	det->SetBoundaryConditions();
+	for (int i = 0; i < argc; i++)
+	{
+		if (!strcmp(argv[i], "-h"))
+		{
+			print_usage();
+			break;
+		}
 
-	//define the space charge
-	TF3 *f2 = new TF3("f2", "x[0]*x[1]*x[2]*0+[0]", 0, 3000, 0, 3000, 0, 3000);
-	f2->SetParameter(0, 2);
-	det->NeffF = f2;
+		if (!strcmp(argv[i], "3D"))
+		{
+			// define a 3D detector with 5 electrodes
+			// x=100 , y is 50 and thickness 120
+			K3D *det = new K3D(7, 80, 80, 300);
+			det->Voltage = 50;
+			// define the drift mesh size and simulation mesh size in microns
+			det->SetUpVolume(0.1, 1);
+			// define  columns #, postions, weigthing factor 2=0 , material Al=1
+			det->SetUpColumn(0, 40, 15, 4, 280, 2, 1);
+			det->SetUpColumn(1, 40, 65, 4, 280, 2, 1);
+			det->SetUpColumn(2, 61.65, 27.5, 4, 280, 2, 1);
+			det->SetUpColumn(3, 61.65, 52.5, 4, 280, 2, 1);
+			det->SetUpColumn(4, 18.35, 27.5, 4, 280, 2, 1);
+			det->SetUpColumn(5, 18.35, 52.5, 4, 280, 2, 1);
+			det->SetUpColumn(6, 40, 40, 4, -280, 16385, 1);
+			det->Temperature = 300;
+			
+			// Float_t Pos[3] = {80, 80, 1};
+			// Float_t Size[3] = {80, 80, 2};
+			// det->ElRectangle(Pos, Size, 0, 20); ///how to use?
 
-	// calculate weigting field
-	// calculate electric field
-	det->CalField(0);
-	det->CalField(1);
-	// set entry points of the track
-	det->enp[0] = 25;
-	det->enp[1] = 40;
-	det->enp[2] = 260;
-	det->exp[0] = 25;
-	det->exp[1] = 40;
-	det->exp[2] = 40;
+			det->SetUpElectrodes();
+			det->SetBoundaryConditions();
+			//define the space charge
+			TF3 *f2 = new TF3("f2", "x[0]*x[1]*x[2]*0+[0]", 0, 3000, 0, 3000, 0, 3000);
+			f2->SetParameter(0, -2);
+			det->NeffF = f2;
 
-	// switch on the diffusion
-	det->diff = 1;
-	// Show mip track
-	TCanvas c1;
-	c1.cd();
-	det->ShowMipIR(150);
+			// calculate weigting field
+			// calculate electric field
+			det->CalField(0);
+			det->CalField(1);
+			// set entry points of the track
+			det->enp[0] = 40;
+			det->enp[1] = 27.5;
+			det->enp[2] = 250;
+			det->exp[0] = 40;
+			det->exp[1] = 27.5;
+			det->exp[2] = 50;
+
+			// switch on the diffusion
+			det->diff = 1;
+			// Show mip track
+			TCanvas c1;
+			c1.cd();
+			det->ShowMipIR(30);
+			TCanvas c3;
+			c3.cd();
+			// int number_pairs_si =76;	//silicon each um
+			// int number_pairs = 51;		//silicon carbide
+			det->MipIR(1520);     // hole-electron paris of silicon
+			//det->MipIR(1020);			 // hole-electron paris of silicon carbide
+			det->sum->Draw("HIST");		 //total current
+			// det->neg->Draw("HIST same"); //electrons current
+			// det->pos->Draw("HIST same"); // hole current
+			c3.SaveAs("txt/Si_induced_current.C");
+			//theApp.Run();
+		} // End "3D"
+
+		if (!strcmp(argv[i], "2D"))
+		{
+			TF1 *neff = new TF1("neff", "[0]+x[0]*0", 0, 1000);
+			neff->SetParameter(0, 10);
+			KPad det(100,100);
+			det.Neff = neff;
+			det.SetDriftHisto(10e-9, 5000);
+			det.Voltage = -500;
+			det.SetUpVolume(1);
+			det.SetEntryPoint(50, 0, 0.5); //set entry point of the track
+			det.SetExitPoint(50, 100, 0.5);
+			det.SetUpElectrodes();
+			det.SStep = 0.1; // set the drift step of e-h pairs
+			det.Temperature = 300; // set the operation temperature
+			
+ 			//set exit point of the track
+			// switch on the diffusion
+			det.diff = 1;
+
+			//--------------------------------------basic information---------------------------------------//
+
+			// TGraph *ElField;						  // electric field
+			// TGraph *ElPotential;					  // electric potential
+			// TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
+			//c2.Divide(2, 3);						  //divide canvas
+
+			// // // // // // electic field
+			// c2.cd(1);
+			// ElField = det.DrawPad("f");
+			// ElField->SetTitle("Electric field");
+			// ElField->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			// ElField->GetYaxis()->SetTitle("E [V/#mum]");
+
+			// // // // // // electric potential  or weighting potential ???
+			// c2.cd(2);
+			// ElPotential=det.DrawPad("p");
+			// ElPotential->SetTitle("Electric Potential");
+			// ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			// ElPotential->GetYaxis()->SetTitle("U [V]");
+
+			// // // // // // doping distribution
+			// c2.cd(3);
+			// TF1 *neffGc;
+			// neffGc = neff->DrawCopy();
+			// neffGc->SetRange(0, 21);
+			// neffGc->SetTitle("Doping profile (full detector)");
+			// neffGc->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			// neffGc->GetYaxis()->SetTitle("N_{eff} [10^{12} cm^{-3}]");
+			// neffGc->GetYaxis()->SetTitleOffset(1.5);
+
+			// // // // // // induced current
+			//c2.cd(4);
+			// gStyle->SetOptStat(kFALSE);
+			// det.MipIR(1000);
+			// TH1F *ele_current = (TH1F *)det.sum->Clone();
+			// det.sum->SetLineColor(3);
+			// det.neg->SetLineColor(4);
+			// det.pos->SetLineColor(2);
+			// det.sum->Draw("HIST");		//plot total induced current
+			// det.neg->Draw("SAME HIST"); //plot electrons' induced current
+			// det.pos->Draw("SAME HIST"); //plot holes' induced current
+			// c2.Update();
+			// KElec tct;
+			// double test_out=tct.CSAamp(ele_current, 1, 1, 21.7, 0.66, 4, 5);
+			// cout<<test_out<<endl;
+			//tct.preamp(ele_current);
+			// tct.CRshape(40e-12, 50, 10000, ele_current);
+			// // tct.RCshape(40e-12, 50, 10000, ele_current);
+			// // tct.RCshape(40e-12, 50, 10000, ele_current);
+			// // tct.RCshape(40e-12, 50, 10000, ele_current);
+			// float rightmax = 1.1 * ele_current->GetMinimum();
+			// float scale = gPad->GetUymin() / rightmax;
+			// ele_current->SetLineColor(6);
+			// ele_current->Scale(scale);
+			//ele_current->Draw("HIST");
+			// auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
+			// 					   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
+			// axis->SetLineColor(6);
+			// axis->SetTextColor(6);
+			// axis->SetTextSize(0.02);
+			// axis->SetLabelColor(6);
+			// axis->SetLabelSize(0.02);
+			// axis->SetTitle("ampl(mV)");
+			// axis->Draw();
+
+			// auto legend = new TLegend(0.6, 0.3, 0.9, 0.6);
+			// legend->AddEntry(det.sum, "sum", "l");
+			// legend->AddEntry(det.neg, "electron", "l");
+			// legend->AddEntry(det.pos, "hole", "l");
+			// legend->AddEntry(ele_current, "current after electric", "l");
+			// legend->SetBorderSize(0);
+			// legend->Draw();
+
+			// // // // // // charge drift
+			// c2.cd(5);
+			// det.ShowMipIR(150);
+
+			// // // // // // e-h pairs
+			// c2.cd(6);
+			// det.MipIR(5100);
+			// det.pairs->Draw("HIST");
+
+			//------------------------------end------------------------------------------------------
 
 
-	theApp.Run();
+			//----------------------------current before electric and after electric---------------------------------------//
+			
+			// TCanvas c3("Plots", "Plots", 1000, 1000);
+			// det.MipIR(50);
+			// TH1F *Icurrent = (TH1F *)det.sum->Clone();
+			// Icurrent->SetLineColor(2);
+			// Icurrent->SetTitle("induced current");
+			// Icurrent->Draw("HIST");
+			// c3.Update();
+			// KElec tct;
+			// tct.preamp(det.sum);
+			// tct.CRshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// det.sum->Scale(1000);
+			// float rightmax = 1.1 * det.sum->GetMinimum();
+			// float scale = gPad->GetUymin() / rightmax;
+			// det.sum->SetLineColor(4);
+			// det.sum->Scale(scale);
+			// det.sum->Draw("HIST SAME");
+			// auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
+			// 					   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
+			// axis->SetLineColor(4);
+			// axis->SetTextColor(4);
+			// axis->SetTextSize(0.02);
+			// axis->SetLabelColor(4);
+			// axis->SetLabelSize(0.02);
+			// axis->SetTitle("ampl(mV)");
+			// axis->Draw();
+
+			//--------------------------------------end--------------------------------//
+
+
+			// // //--------------------timing scan------------------------------
+			ofstream outfile;
+			outfile.open("time_resolution_2021_4_21.txt");
+			
+			TH1F *charge_total = new TH1F("t_charge", "t_charge", 200, -2, 0);
+			TH1F *CSA_time_resolution = new TH1F("CSA_time_resolution", "CSA_time_resolution", 2000, 0, 50);
+			Int_t i=0;
+			do
+			{
+		 	TH1::AddDirectory(kFALSE);
+
+			// // // induced current
+			TCanvas c4("Plots", "Plots", 1000, 1000);
+			c4.cd();
+			det.MipIR(1000);
+			TH1F *Icurrent = (TH1F *)det.sum->Clone();
+			Icurrent->Draw("HIST");
+			Double_t charge_t;
+			charge_t = Icurrent->Integral() * ((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX()) * 1e15;
+			charge_total->Fill(charge_t);
+			std::cout << "charge:" << charge_t << std::endl;
+
+			std::string output;
+			output = "out/sic_2021_4_21_ic/sic_events_" + std::to_string(i) + ".C";
+			const char *out = output.c_str();
+			c4.SaveAs(out);
+
+			c4.Update();
+			// //current after electric
+			TCanvas c5("Plots", "Plots", 1000, 1000);
+			c5.cd();
+			KElec tct;
+			Double_t CSA_thre_time = tct.CSAamp(det.sum, 0.3, 0.6, 75, 10, 0.66, 3);
+			// // taurise=1ns taufall=1ns  detector capacitance=75 pF  CSATransImp=10
+			// // CSA noise=0.66  CSA_threshold=3
+
+			std::cout << "CSA_thre_time:" << CSA_thre_time << std::endl;
+			CSA_time_resolution->Fill(CSA_thre_time);
+			//outfile<<CSA_thre_time<<endl;
+			// //tct.preamp(det.sum);
+			// // tct.CRshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // tct.RCshape(40e-12, 50, 10000, det.sum);
+			det.sum->Draw("HIST");
+
+			std::string output_1;
+			output_1 = "out/sic_2021_4_21_ec/sic_events_" + std::to_string(i)+".C";
+			const char *out_1 = output_1.c_str();
+			c5.SaveAs(out_1);
+			std::cout<<output_1<<std::endl;
+			i++;
+
+			} while (i<3000);
+			
+			///////////////e-h pairs
+			TCanvas c6("Plots", "Plots", 1000, 1000);
+			c6.cd();
+			charge_total->Draw("HIST");
+			c6.SaveAs("eh_pairs.pdf");
+
+			TCanvas c7("Plots", "Plots", 1000, 1000);
+			c7.cd();
+			CSA_time_resolution->Draw("HIST");
+			c7.SaveAs("time_resolution_2021_4_21.pdf");
+			outfile.close();
+
+			// --------------------end---------------
+
+		theApp.Run();
+		} // End "2D"
+	}
+
+
 }
-
+ 
 #endif
 
+// // Random noise simulation // //
+
+// TRandom3 r;
+// double CSAx1 = 0;
+// //
+// TH1F *charge_total = new TH1F("sim_noise", "sim_noise", 1000, -13, 12);
+// for (int i = 0; i < 300000; i += 1)
+// {
+
+// 	r.SetSeed(0);
+
+// 	CSAx1 = r.Gaus(0.66, 2.36);
+
+// 	charge_total->Fill(CSAx1);
+// 	//
+// }
+// charge_total->Draw();
+
+//endl

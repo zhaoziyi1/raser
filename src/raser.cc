@@ -608,8 +608,6 @@ Float_t KStruct::GetCHMult(TH1F *histo, Int_t Update, Float_t Mult, Float_t tau)
 
 #include "TH3I.h"
 #include "TH2F.h"
-
-// #include "TMath.h"
 #include "math.h"
 
 TH2F *KHisProject(void *hisIn,Int_t axis,Int_t Bin1)
@@ -1179,9 +1177,6 @@ Int_t KField::CalField()
 						Y[q]=U->GetBinContent(i,j+q-1,k);
 
 					}
-					//std::cout << "i:" << i << "j:" << j << "k:" << k << std::endl;
-					//std::cout << "X[0]:" << X[0] << "X[1]:" << X[1] << "X[2]:" << X[2] << std::endl;
-					//std::cout << "Y[0]:" << Y[0] << "Y[1]:" << Y[1] << "Y[2]:" << Y[2] << std::endl;
 
 					Ey->SetBinContent(i,j,k,GetFieldPoint(X,Y));
 					// std::cout << GetFieldPoint(X, Y) << std::endl;
@@ -1198,8 +1193,6 @@ Int_t KField::CalField()
 				}
 
 				EE=TMath::Sqrt(TMath::Power(Ex->GetBinContent(i,j,k),2)+TMath::Power(Ey->GetBinContent(i,j,k),2)+TMath::Power(Ez->GetBinContent(i,j,k),2));
-				//std::cout << "i:" << i << "j:" << j << "k:" << k << std::endl;
-				//std::cout << "EX:"<<Ex->GetBinContent(i,j,k)<<",Ey:"<<Ey->GetBinContent(i,j,k)<<",EE:" <<EE<< std::endl;
 				E->SetBinContent(i,j,k,EE);
 
 			}
@@ -2469,10 +2462,6 @@ class KPad : public KDetector
 {
 private:
 //Runge Kutta method for solving the field
-//   void           rk4(float *,float *,int,float,float,float*); 
-//   Float_t        rtbis(float, float, float);
-//   Float_t        PoEqSolve(Float_t);
-//   void           Derivs(float x,float *,float *);
   TArrayF PhyPot;       //electric potential
   TArrayF PhyField;     //electric field 
 public:
@@ -2491,62 +2480,12 @@ public:
 
 KPad::KPad(Float_t x,Float_t y)
 {
-  	//Constructor of the class KPad:
-  	//		Float_t x ; width of the diode in um. For the simulation it is not neccessary to put real dimensions
-  	//		Float_t y ; thickness in um
- 	//Neff=NULL;
   	CellX=x;  CellY=y;
 }
  
 KPad::~KPad()
 {
 }
-
-// void KPad::Derivs(float x, float y[], float dydx[])
-// {
-// 	//Double_t permMat=(material==0)?perm:permDi;
-// 	Double_t permMat = Perm(KMaterial::Mat);
-// 	Double_t permV = perm0 * 1e-6;
-// 	dydx[1] = y[2];
-// 	dydx[2] = -Neff2D->Eval(x) * e_0 / (permMat * permV);
-// 	// if(x>150) dydx[2]*=permMat;
-// }
-
-// Float_t KPad::PoEqSolve(Float_t der)
-// {
-// 	//TArrayF PhyField(ny+2);
-// 	//TArrayF PhyPot(ny+2);
-// 	//Float_t Step=1;
-
-// 	Int_t i;
-// 	Float_t h, x = 0;
-
-// 	Float_t y[3], dydx[3], yout[3];
-
-// 	y[1] = Voltage;
-// 	y[2] = der;
-// 	PhyField[0] = y[2];
-// 	PhyPot[0] = y[1];
-	
-// 	Derivs(x, y, dydx);
-	
-// 	for (i = 1; i <= ny; i++)
-// 	{
-// 		h = GetStepSize(1, i);
-// 		rk4(y, dydx, 2, x, h, yout);
-// 		//printf("%f %f %f\n",x+h,yout[1],yout[2]);
-// 		y[1] = yout[1]; //electric potential
-// 		y[2] = yout[2];	// electric filed
-// 		PhyField[i] = y[2];
-// 		PhyPot[i] = y[1];
-// 		//std::cout << "x:" << x << ",y[x]:" << y[1] << "," << y[2] << std::endl;
-// 		x = x + h;
-// 		Derivs(x, y, dydx);
-		
-// 	}
-// 	//     printf("y[1]=%f\n",xp1);
-// 	return y[1];
-// }
 
 void KPad::SetUpVolume(Float_t St1, Int_t Mat)
 {
@@ -2570,11 +2509,6 @@ void KPad::SetUpElectrodes(std::string out_path)
 {
  
  	for(int i=1;i<=nx;i++){ EG->SetBinContent(i,1,1,2);  EG->SetBinContent(i,ny,1,16385);} 
- 	// KMaterial::Mat=10;
-  	//Default track
- 	// enp[0]=CellX/2;  exp[0]=enp[0];
- 	// enp[1]=1;        exp[1]=CellY;
-
  	if(Neff2D!=NULL )
  	{
 		//GetField();
@@ -2584,62 +2518,6 @@ void KPad::SetUpElectrodes(std::string out_path)
    		printf("Please define space charge function Neff before field calculation\n");
  
 }
-
-// Float_t KPad::rtbis(float x1, float x2, float xacc)
-// {
-// 	void nrerror(char error_text[]);
-// 	int j;
-// 	float dx, f, fmid, xmid, rtb;
-
-// 	f = PoEqSolve(x1);
-// 	fmid = PoEqSolve(x2);
-// 	if (f * fmid >= 0.0)
-// 		nrerror("Root must be bracketed for bisection in rtbis");
-// 	rtb = f < 0.0 ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
-// 	for (j = 1; j <= JMAX; j++)
-// 	{
-// 		//xmid find a good electric field intial value
-// 		fmid = PoEqSolve(xmid = rtb + (dx *= 0.5));
-// 		// fmid is the electric field at the readout electrodes
-// 		if (fmid <= 0.0)
-// 			rtb = xmid;
-// 		if (fabs(dx) < xacc || fmid == 0.0)
-// 			return rtb;
-// 	}
-// 	nrerror("Too many bisections in rtbis");
-// 	return 0.0;
-// }
-// void KPad::rk4(float y[], float dydx[], int n, float x, float h, float yout[])
-// {
-// 	float *vector(long, long);
-// 	void free_vector(float *, long, long);
-// 	int i;
-// 	float xh, hh, h6, *dym, *dyt, *yt;
-
-// 	dym = vector(1, n);
-// 	dyt = vector(1, n);
-// 	yt = vector(1, n);
-// 	hh = h * 0.5;
-// 	h6 = h / 6.0;
-// 	xh = x + hh;
-// 	for (i = 1; i <= n; i++)
-// 		yt[i] = y[i] + hh * dydx[i];
-// 	Derivs(xh, yt, dyt);
-// 	for (i = 1; i <= n; i++)
-// 		yt[i] = y[i] + hh * dyt[i];
-// 	Derivs(xh, yt, dym);
-// 	for (i = 1; i <= n; i++)
-// 	{
-// 		yt[i] = y[i] + h * dym[i];
-// 		dym[i] += dyt[i];
-// 	}
-// 	Derivs(x + h, yt, dyt);
-// 	for (i = 1; i <= n; i++)
-// 		yout[i] = y[i] + h6 * (dydx[i] + dyt[i] + 2.0 * dym[i]);
-// 	free_vector(yt, 1, n);
-// 	free_vector(dyt, 1, n);
-// 	free_vector(dym, 1, n);
-// }
 
 void KPad::Get_Fenics_Field(std::string out_path)
 {
@@ -2681,35 +2559,6 @@ void KPad::Get_Fenics_Field(std::string out_path)
 	delete[] W_potential;
 	delete[] E_potential;
 }
-
-// void KPad::GetField()
-// {
-// 	Int_t i, j;
-// 	//Float_t Step=1;
-// 	Float_t aa;
-// 	PhyPot = TArrayF(ny + 2);
-// 	PhyField = TArrayF(ny + 2);
-// 	Double_t *x = new Double_t[nx * ny + 1];
-// 	//TArrayD PhyPot2D(nx*ny+1);
-// 	//TArrayI StripPosition=TArrayI(2); StripPosition[0]=1; StripPosition[1]=nx;
-
-// 	aa = rtbis(-100, 100, 0.000001);
-// 	//if(!Invert && GetDepletionVoltage()>Voltage) aa=rtbis(1,300,0.000001); else aa=rtbis(-10,10,0.000001);
-
-// 	for (j = 1; j <= ny; j++)
-// 		for (i = 1; i <= nx; i++)
-// 		{
-// 			x[i + (j - 1) * nx] = (Double_t)PhyPot[j - 1];
-// 		}
-// 	//Real=EField(PhyPot2D,nx,ny);
-// 	//Real->CalField(Step,1);
-
-// 	// for(i=0;i<nx*ny+1;i++)     {printf("%f ",PhyPot2D[i]); if(i%nx==0) printf("\n");}
-
-// 	Real->U = MapToGeometry(x);
-// 	Real->CalField();
-// 	delete[] x;
-// }
 
 TGraph *KPad::DrawPad(char *option)
 {
@@ -3456,11 +3305,6 @@ int main(int argc, char** argv) {
 			det.diff = 1;
 
 			// // // //--------------------timing scan------------------------------
-			// std::ofstream outfile;
-			// outfile.open("out_txt/time_resolution_2021_5_14.txt");
-			
-			// TH1F *charge_total = new TH1F("t_charge", "t_charge", 200, -2, 0);
-			// TH1F *CSA_time_resolution = new TH1F("CSA_time_resolution", "CSA_time_resolution", 2000, 0, 50);
 
 			Int_t i=0;
 			do
@@ -3472,17 +3316,9 @@ int main(int argc, char** argv) {
 			det.MipIR(100);
 			//save current
 			TH1F *Icurrent = (TH1F *)det.sum->Clone();
-			// Icurrent->Draw("HIST");
 			Double_t charge_t;
 			charge_t = Icurrent->Integral() * ((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX()) * 1e15;
-			// charge_total->Fill(charge_t);
 			std::cout << "charge:" << charge_t << std::endl;
-			// // // std::string output;
-			// // output = "out/sic_2021_4_26_ic_angle/sic_events_" + std::to_string(i) + ".C";
-			//  //const char *out = output.c_str();
-			// // c4.SaveAs(out);
-			// c4.Update();
-			// //current after electric
 
 			TCanvas c5("Plots", "Plots", 1000, 1000);
 			c5.cd();
@@ -3490,10 +3326,6 @@ int main(int argc, char** argv) {
 			double CSA_thre_time = tct.CSAamp(det.sum, 0.4, 0.2, 75, 10, 0.66, 3);
 			// // taurise=1ns taufall=1ns  detector capacitance=75 pF  CSATransImp=10
 			// // CSA noise=0.66  CSA_threshold=3
-			// /// // // // // std::cout << "CSA_thre_time:" << CSA_thre_time << std::endl;
-			// /// // // // // if (CSA_thre_time!=0)
-			// /// // // // // 	CSA_time_resolution->Fill(CSA_thre_time);
-			// // // // outfile<<CSA_thre_time<<std::endl;
 			// //tct.preamp(det.sum);
 			// // tct.CRshape(40e-12, 50, 10000, det.sum);
 			det.sum->Draw("HIST");
@@ -3506,13 +3338,6 @@ int main(int argc, char** argv) {
 			command_mk += output_name + " -p";
 			system(command_rm.c_str());
 			system(command_mk.c_str());
-			// if (access(output_name.c_str(), 0) == -1)
-        	// if (mkdir(output_name.data()))
-			// {
-			// 	std::string command_temp = "rd /S /Q ";
-			// 	command_temp.append(output_name);
-			// 	system(command_temp.data());
-			// };
 			output_name += "/sic_events_" + std::to_string(i)+".C";
 			const char *out_1 = output_name.c_str();
 			c5.SaveAs(out_1);
@@ -3520,20 +3345,7 @@ int main(int argc, char** argv) {
 			i++;
 
 			} while (i<1);
-			
-			///////////////e-h pairs 
-			// // TCanvas c6("Plots", "Plots", 1000, 1000);
-			// // c6.cd();
-			// // charge_total->Draw("HIST");
-			// // c6.SaveAs("out_txt/eh_pairs_5_14.pdf");
-
-			// /// // // // TCanvas c7("Plots", "Plots", 1000, 1000);
-			// /// // // // c7.cd();
-			// /// // // // CSA_time_resolution->Draw("HIST");
-			// /// // // // c7.SaveAs("out_txt/time_resolution_2021_5_14.pdf");
-			// // outfile.close();
-
-			// --------------------end---------------
+		
 			j++;
 			} while (j<8);
 
@@ -3670,23 +3482,3 @@ int main(int argc, char** argv) {
 }
  
 #endif
-
-// // Random noise simulation // //
-
-// TRandom3 r;
-// double CSAx1 = 0;
-// //
-// TH1F *charge_total = new TH1F("sim_noise", "sim_noise", 1000, -13, 12);
-// for (int i = 0; i < 300000; i += 1)
-// {
-
-// 	r.SetSeed(0);
-
-// 	CSAx1 = r.Gaus(0.66, 2.36);
-
-// 	charge_total->Fill(CSAx1);
-// 	//
-// }
-// charge_total->Draw();
-
-//endl

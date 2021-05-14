@@ -1,4 +1,3 @@
-#from fenics import RectangleMesh,UnitSquareMesh,FunctionSpace,Expression,DirichletBC,TrialFunction,TestFunction,Constant,dot,grad,Function,dx,solve,plot,File,errornorm,Point
 from fenics import *
 import matplotlib.pyplot as plt
 import ROOT
@@ -16,9 +15,6 @@ nx=1
 perm_sic=9.76
 detector_x=100.0
 ny=int(detector_y/SetUpVolume)
-
-# nx=1
-# ny=int(detector_y/SetUpVolume)
 #####Poisson equationc
 
 #### constant value
@@ -124,74 +120,3 @@ for i in range(0,int(len(vertex_values_u)/2)-1):
     tree_out.Fill()
 tree_out.Write()
 out_file.Close()
-
-
-# plt.figure(figsize=(20,20))
-# plt.subplot(3,2,1)
-# plt.title('Electric field')
-# plt.xlabel('depth [um]')
-# plt.ylabel('Electric field [V/um]')
-# plt.plot(x_value, E_value)   
-
-# plt.subplot(3,2,2)
-# plt.title('potential')
-# plt.xlabel('depth [um]')
-# plt.ylabel('Electric potential [V]')
-# plt.plot(x_value, y_value)
-# plt.subplot(3,2,3)
-# #plt.title('weighting Electric field')
-# plt.xlabel('depth [um]')
-# plt.ylabel('weighting Electric field [V/um]')
-# plt.plot(x_value, E_w_value)   
-
-# plt.subplot(3,2,4)
-# #plt.title('weighting potential')
-# plt.xlabel('depth [um]')
-# plt.ylabel('weighting potential [V]')
-# plt.plot(x_value, y_w_value)
-
-# plt.subplot(3,1,3)
-# plot(u,title='Finite element solution')  
-# plot(u)  
-
-# plt.subplot(3,2,4)
-# #plot(mesh,title='Finite element mesh')
-# plot(mesh)
-# plt.savefig('python//png//2D_poisson_result.png')
-# plt.grid(True)
-# plt.show()
-
-
-
-# plt.legend([’Deflection ($\\times 50$)’, ’Load’], loc=’upper left’)
-# plt.savefig(’poisson_membrane/curves.pdf’)
-# plt.savefig(’poisson_membrane/curves.png’)
-# Save solution to file in VTK format
-# vtkfile = File('solution.pvd')
-# vtkfile << u
-
-# # Compute error in L2 norm
-# error_L2 = errornorm(u_D, u, 'L2')
-
-# # Compute maximum error at vertices
-# vertex_values_u_D = u_D.compute_vertex_values(mesh)
-# vertex_values_u = u.compute_vertex_values(mesh)
-# import numpy as np
-# error_max = np.max(np.abs(vertex_values_u_D - vertex_values_u))
-
-# # Print errors
-# print('error_L2  =', error_L2)
-# print('error_max =', error_max)
-
-# Hold plot
-#interactive()
-
-
-#write to the out_file
-# out_txt="python/fenics_2Dpossion.txt"
-# out_file = open(out_txt,"w")
-# out_file.close()
-# out_file = open(out_txt,"a")
-# out_file.write("depth,electric field(V/um),weighting potential\n")
-#     out_file.write(str(x_value[i])+","+str(E_value[i])+","+str(y_w_value[i])+"\n")
-# out_file.close()

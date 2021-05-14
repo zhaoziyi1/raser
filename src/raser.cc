@@ -1,4 +1,3 @@
-// 
 // Author: SHI Xin <shixin@ihep.ac.cn> 
 // Created [2021-03-31 Sun 15:05] 
 // Based on KDetSim : http://kdetsim.org 
@@ -29,8 +28,8 @@
 #include "TH1.h"
 #include "TRandom3.h"
 #include "TGaxis.h"
+
 // KDetSim
-using namespace std;
 // nrutil
 // double *dvector(long nl, long nh);
 #define NR_END 1 
@@ -1104,10 +1103,7 @@ Float_t KField::KInterpolate2D(TH3F *his, Float_t x, Float_t y, Int_t dir, Int_t
 	if(EX2>ax1->GetNbins()) {t=0; EX2=ax1->GetNbins();} else
 		if(EX1<1) {t=0; EX1=1;} else  
 			t=(x-ax1->GetBinCenter(EX1))/(ax1->GetBinCenter(EX2)-ax1->GetBinCenter(EX1));
-
-
 	//     printf("Points are:: %d %d %d %d [dir=%d, bin=%d] (t=%f u=%f)\n",EX1,EX2,EY1,EY2, dir, bin, t,u);
-
 	switch(dir)
 	{
 		case 3: 
@@ -1123,7 +1119,6 @@ Float_t KField::KInterpolate2D(TH3F *his, Float_t x, Float_t y, Int_t dir, Int_t
 			v22=his->GetBinContent(bin,EX2,EY2); v12=his->GetBinContent(bin,EX1,EY2);
 			break;
 	}
-
 	ret=(1-t)*(1-u)*v11;
 	ret+=t*(1-u)*v21;
 	ret+=t*u*v22;
@@ -1214,14 +1209,14 @@ Int_t KField::CalField()
 }
 
 Float_t KField::GetFieldPoint(Float_t *X, Float_t *Y)
-{
+{	//Equidistant the code is equal to (Y[2]-Y[0])/(2*(X[0]-X[1]))
+	//non-Equidistant fi'+fi''(x[1]-x[0])/2, fi'is the electric field
 	//electric potential to field
 	Float_t a,b,k12,k23;
 	k12=(Y[0]-Y[1])/(X[0]-X[1]);
 	k23=(Y[1]-Y[2])/(X[1]-X[2]);
 	a=(k23-k12)/(X[2]-X[0]);
 	b=k12-a*(X[0]+X[1]);
-	//std::cout<< "b:" <<b<<"field:"<<2*a*X[1]+b<<std::endl;
 	return 2*a*X[1]+b;
 }
 
@@ -1262,6 +1257,7 @@ void KField::CalFieldXYZ(Float_t x, Float_t y, Float_t z, TVector3 *vec)
 Double_t KField::DriftVelocity(Float_t E,Float_t Charg, Float_t T, Double_t Neff, Int_t which)
 {
 	E*=1e4;//um->cm
+	//std::cout<<Neff;
 	return(Mobility(E,T,Charg,Neff,which)*(Double_t)E);
 }
 
@@ -1269,6 +1265,7 @@ Float_t KField::CalPotXYZ(Float_t x, Float_t y, Float_t z)
 {
 	Float_t ret=0;
 	Int_t nx,ny,nz,bx,by,bz;
+	//Interpolate get the the better U
 	if(dim==2) ret=KInterpolate2D(U,x,y);
 	else 
 	{
@@ -1322,21 +1319,20 @@ Double_t KField::Mobility(Float_t E,Float_t T,Float_t Charg,Double_t Neff, Int_t
 				Double_t ulp = 124 * TMath::Power(T / 300, -2);
 				Double_t uminp = 15.9;
 				Double_t Crefp = 1.76e19;
-				betap = 1.213 * TMath::Power(T / 300, 0.17);
-				vsatp = 2e7 * TMath::Power(T / 300, 0.52);
-				lfm = uminp + ulp/ (1 + TMath::Power(Neff / Crefp, alpha));
-				hfm = lfm / (TMath::Power(1 + TMath::Power(lfm * E / vsatp, betap), 1 / betap));
+				betap = 1.213 * TMath::Power(T / 300.0, 0.17);
+				vsatp = 2e7 * TMath::Power(T / 300.0, 0.52);
+				lfm = uminp + ulp/ (1.0 + TMath::Power(Neff*1e12 / Crefp, alpha));
+				hfm = lfm / (TMath::Power(1.0 + TMath::Power(lfm * E / vsatp, betap), 1.0 / betap));
 			}
 			else
 			{
 				alpha = 0.61;
 				Double_t ulp = 947 * TMath::Power(T / 300, -2);
-				Double_t uminp = 40.0 * TMath::Power(T / 300, -0.5);
 				Double_t Crefp = 1.94e19;
 				betap = 1 * TMath::Power(T / 300, 0.66);
 				vsatp = 2e7 * TMath::Power(T / 300, 0.87);
-				lfm = ulp/ (1 + TMath::Power(Neff / Crefp, alpha));
-				hfm = lfm / (TMath::Power(1 + TMath::Power(lfm * E / vsatp, betap), 1/betap));
+				lfm = ulp/ (1 + TMath::Power(Neff*1e12 / Crefp, alpha));
+				hfm = lfm / (TMath::Power(1.0 + TMath::Power(lfm * E / vsatp, betap), 1.0/betap));
 			}
 			break;
 		//silicon
@@ -1470,6 +1466,7 @@ class KDetector : public KGeometry, public KMaterial {
 		// Definition of space charge 
 		TF3     *NeffF;     //effective dopping concentration function
 		TH3F    *NeffH;     //effective dopping concentration histogram
+		TF1     *Neff2D;
 
 		// Weigthing, electric and magnetic field
 		KField *Ramo;       // ramo field 
@@ -1602,6 +1599,7 @@ KDetector::KDetector()
 	NeffF=new TF3("Profile","x[0]*x[1]*x[2]*0+[0]",0,1000,0,1000,0,1000);
 	NeffF->SetParameter(0,0);
 	NeffH=NULL; //Neff histogram se to NULL
+	Neff2D=NULL;
 
 	//set magnetic field to zero
 	for(Int_t i=0;i<3;i++) B[i]=0;
@@ -1652,6 +1650,7 @@ KDetector::~KDetector()
 
 	if(NeffF!=NULL) delete NeffF;
 	if(NeffH!=NULL) delete NeffH;
+	if(Neff2D!=NULL) delete Neff2D;
 	if(ran!=NULL) delete ran;
 	if(pos!=NULL) delete pos;
 	if(pairs!=NULL) delete pairs;
@@ -2020,9 +2019,9 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 	/////////////////////////////////////////////////////////////////
 	// If there is no attenuation coefficient we consider that as mip
 	/////////////////////////////////////////////////////////////////
-	TFile Myf("Geant_Vin.root");
+	TFile Myf("SiC_5um.root");
 	TH1F *EDist;
-	EDist = (TH1F *)Myf.Get("Silicon_Vin");
+	EDist = (TH1F *)Myf.Get("Edep_device");
 
 	if (lambda != 0)
 	{
@@ -2031,7 +2030,6 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 		lent = TMath::Sqrt(lent);
 		lenlam = lent / lambda;
 		Io = div / (lambda * (1 - TMath::Exp(-lenlam)));
-
 			//     if(Debug)
 			//  printf("Calculated length=%f um, lenDIVlamda=%f, I0=%f \n", lent,lenlam,Io );
 	}
@@ -2051,7 +2049,7 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 		drift_d = TMath::Sqrt(TMath::Power(sp_2[0]-sp[0], 2) + TMath::Power(sp_2[1]-sp[1], 2)+ TMath::Power(sp_2[2]-sp[2], 2));
 		gRandom = new TRandom3(0);
 		float ran_pairs = EDist->GetRandom();
-		n_pairs =drift_d*ran_pairs*1e6/(5*loss_energy)*1.582;
+		n_pairs =drift_d*ran_pairs*1e6/(5*loss_energy);
 		total_pairs+=n_pairs;
 		//1.582 is change silicon loss energy to silicon carbide 
 		// if (i<10) std::cout<<"drift_d:"<<drift_d<<std::endl;
@@ -2109,7 +2107,7 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 			histon->Scale(lent / div);
 		}
 		/////////////////////////////////////////////////////////////////////////////////
-		pairs->Fill(ran_pairs*1e6/(5*loss_energy)*1.582);
+		pairs->Fill(ran_pairs*1e6/(5*loss_energy));
 		pos->Add(histop);
 		neg->Add(histon);
 		histop->Reset();
@@ -2119,8 +2117,8 @@ void KDetector::MipIR(Int_t div, Float_t lambda)
 
 	/// total laudau distribution
 	float d = TMath::Sqrt(TMath::Power((exp[0] - enp[0]), 2) + TMath::Power((exp[1] - enp[1]), 2) + TMath::Power((exp[2] - enp[2]), 2));
-	float mpv = (0.027 * log(d) + 0.126)*1.582; //keV/micron ==> log base "e"
-	float FWHM = 0.31 * pow(d, -0.19);	   // this is the FWHM keV/micron, 4 times the sigma parameter in root.
+	float mpv = 0.04 * log(d) + 0.27; //keV/micron ==> log base "e"
+	float FWHM = 0.31 * pow(d, -0.17);	   // this is the FWHM keV/micron, 4 times the sigma parameter in root.
 	float DA = FWHM / 4.;
 	TRandom3 Lan;
 	TDatime *time; // current time
@@ -2161,7 +2159,7 @@ void KDetector::Drift(Double_t sx, Double_t sy, Double_t sz, Float_t charg, KStr
 	Double_t sumc=0;                        // total induced charge
 	Double_t ncx=0,ncy=0,ncz=0;             // next position of the charge bucket   
 	Double_t deltacx,deltacy,deltacz;       // drift step due to drift
-
+	Double_t input_neff;
 	Int_t st=0;                             // current step
 	Int_t ishit=0;                          // local counter of the step
 	TVector3 *EE;                           // Set up electric field vector
@@ -2178,7 +2176,7 @@ void KDetector::Drift(Double_t sx, Double_t sy, Double_t sz, Float_t charg, KStr
 	// Start time in the  absolute domain (used for delayed charge generation in multiplication 
 
 	t=t0;
-
+	// if(sz!=0.5) std::cout<<sz<<std::endl;
 	// Intitialize KStruct class and its members 
 
 	xcv=seg->Xtrack; 
@@ -2226,14 +2224,15 @@ void KDetector::Drift(Double_t sx, Double_t sy, Double_t sz, Float_t charg, KStr
 		else { deltacx=0; deltacy=0; deltacz=0; }
 
 		//    printf("Calculate velocity \n");
-
+ 	if(Neff2D!=NULL ) input_neff=TMath::Abs(Neff2D->Eval(cx));
+	else input_neff=TMath::Abs(NeffF->Eval(cx,cy,cz));
 		if(DM!=NULL)
 			KMaterial::Mat=DM->GetBinContent(DM->FindBin(cx,cy,cz)); 
 		else KMaterial::Mat=0;
 						 //      EEN=Real->CalFieldXYZ(cx+deltacx,cy+deltacy,cz+deltacz); // get field & velocity at new location //12.9.2018
 		Real->CalFieldXYZ(cx + deltacx, cy + deltacy, cz + deltacz, EEN); // get field & velocity at new location
-		vel=Real->DriftVelocity( (EEN->Mag()+EE->Mag())/2,charg,Temperature,TMath::Abs(NeffF->Eval(cx,cy,cz)),MobMod());
-
+		vel=Real->DriftVelocity( (EEN->Mag()+EE->Mag())/2,charg,Temperature,input_neff,MobMod());
+		//std::cout<<vel<<std::endl;
 		//printf("Calculate vel: %e EEN = %e ::: ",vel, EEN->Mag());
 		if(vel==0) {
 			deltacx=0; deltacy=0; deltacz=0; 
@@ -2247,7 +2246,7 @@ void KDetector::Drift(Double_t sx, Double_t sy, Double_t sz, Float_t charg, KStr
 				// off when the field gets large enough
 			{
 				Stime=SStep*1e-4/vel; // calcualte step time  
-				sigma=TMath::Sqrt(2*Kboltz*Real->Mobility(EE->Mag(),Temperature,charg,TMath::Abs(NeffF->Eval(cx,cy,cz)),MobMod())*Temperature*Stime); 
+				sigma=TMath::Sqrt(2*Kboltz*Real->Mobility(EE->Mag(),Temperature,charg,input_neff,MobMod())*Temperature*Stime); 
 				dify=ran->Gaus(0,sigma)*1e4; 
 				difx=ran->Gaus(0,sigma)*1e4;
 				if(nz!=1) difz=ran->Gaus(0,sigma)*1e4; else difz=0;
@@ -2471,14 +2470,14 @@ class KPad : public KDetector
 {
 private:
 //Runge Kutta method for solving the field
-  void           rk4(float *,float *,int,float,float,float*); 
-  Float_t        rtbis(float, float, float);
-  Float_t        PoEqSolve(Float_t);
-  void           Derivs(float x,float *,float *);
+//   void           rk4(float *,float *,int,float,float,float*); 
+//   Float_t        rtbis(float, float, float);
+//   Float_t        PoEqSolve(Float_t);
+//   void           Derivs(float x,float *,float *);
   TArrayF PhyPot;       //electric potential
   TArrayF PhyField;     //electric field 
 public:
-   TF1     *Neff;   // effective dopping concentration 
+   //TF1     *Neff;   // effective dopping concentration 
    Float_t CellY;   // thickness of the diode
    Float_t CellX;   // width of the diode
 
@@ -2486,8 +2485,8 @@ public:
   ~KPad(); 
    	void SetUpVolume(Float_t,Int_t =0); 
 	void SetUpElectrodes();
-	void GetRamoField();
-	void GetField();
+	void Get_Fenics_Field();
+	// void GetField();
 	TGraph   *DrawPad(char*);
 };
 
@@ -2496,7 +2495,7 @@ KPad::KPad(Float_t x,Float_t y)
   	//Constructor of the class KPad:
   	//		Float_t x ; width of the diode in um. For the simulation it is not neccessary to put real dimensions
   	//		Float_t y ; thickness in um
- 	Neff=NULL;
+ 	//Neff=NULL;
   	CellX=x;  CellY=y;
 }
  
@@ -2504,52 +2503,51 @@ KPad::~KPad()
 {
 }
 
-void KPad::Derivs(float x, float y[], float dydx[])
-{
-	//Double_t permMat=(material==0)?perm:permDi;
-	Double_t permMat = Perm(KMaterial::Mat);
-	Double_t permV = perm0 * 1e-6;
-	;
-	dydx[1] = y[2];
-	dydx[2] = -Neff->Eval(x) * e_0 / (permMat * permV);
-	// if(x>150) dydx[2]*=permMat;
-}
+// void KPad::Derivs(float x, float y[], float dydx[])
+// {
+// 	//Double_t permMat=(material==0)?perm:permDi;
+// 	Double_t permMat = Perm(KMaterial::Mat);
+// 	Double_t permV = perm0 * 1e-6;
+// 	dydx[1] = y[2];
+// 	dydx[2] = -Neff2D->Eval(x) * e_0 / (permMat * permV);
+// 	// if(x>150) dydx[2]*=permMat;
+// }
 
-Float_t KPad::PoEqSolve(Float_t der)
-{
-	//TArrayF PhyField(ny+2);
-	//TArrayF PhyPot(ny+2);
-	//Float_t Step=1;
+// Float_t KPad::PoEqSolve(Float_t der)
+// {
+// 	//TArrayF PhyField(ny+2);
+// 	//TArrayF PhyPot(ny+2);
+// 	//Float_t Step=1;
 
-	Int_t i;
-	Float_t h, x = 0;
+// 	Int_t i;
+// 	Float_t h, x = 0;
 
-	Float_t y[3], dydx[3], yout[3];
+// 	Float_t y[3], dydx[3], yout[3];
 
-	y[1] = Voltage;
-	y[2] = der;
-	PhyField[0] = y[2];
-	PhyPot[0] = y[1];
+// 	y[1] = Voltage;
+// 	y[2] = der;
+// 	PhyField[0] = y[2];
+// 	PhyPot[0] = y[1];
 	
-	Derivs(x, y, dydx);
+// 	Derivs(x, y, dydx);
 	
-	for (i = 1; i <= ny; i++)
-	{
-		h = GetStepSize(1, i);
-		rk4(y, dydx, 2, x, h, yout);
-		//printf("%f %f %f\n",x+h,yout[1],yout[2]);
-		y[1] = yout[1]; //electric potential
-		y[2] = yout[2];	// electric filed
-		PhyField[i] = y[2];
-		PhyPot[i] = y[1];
-		//std::cout << "x:" << x << ",y[x]:" << y[1] << "," << y[2] << std::endl;
-		x = x + h;
-		Derivs(x, y, dydx);
+// 	for (i = 1; i <= ny; i++)
+// 	{
+// 		h = GetStepSize(1, i);
+// 		rk4(y, dydx, 2, x, h, yout);
+// 		//printf("%f %f %f\n",x+h,yout[1],yout[2]);
+// 		y[1] = yout[1]; //electric potential
+// 		y[2] = yout[2];	// electric filed
+// 		PhyField[i] = y[2];
+// 		PhyPot[i] = y[1];
+// 		//std::cout << "x:" << x << ",y[x]:" << y[1] << "," << y[2] << std::endl;
+// 		x = x + h;
+// 		Derivs(x, y, dydx);
 		
-	}
-	//     printf("y[1]=%f\n",xp1);
-	return y[1];
-}
+// 	}
+// 	//     printf("y[1]=%f\n",xp1);
+// 	return y[1];
+// }
 
 void KPad::SetUpVolume(Float_t St1, Int_t Mat)
 {
@@ -2578,128 +2576,152 @@ void KPad::SetUpElectrodes()
  	// enp[0]=CellX/2;  exp[0]=enp[0];
  	// enp[1]=1;        exp[1]=CellY;
 
- 	if(Neff!=NULL )
+ 	if(Neff2D!=NULL )
  	{
-		GetField();
-		GetRamoField();
+		//GetField();
+		Get_Fenics_Field();
  	}
  	else 
    		printf("Please define space charge function Neff before field calculation\n");
  
 }
 
-Float_t KPad::rtbis(float x1, float x2, float xacc)
-{
-	void nrerror(char error_text[]);
-	int j;
-	float dx, f, fmid, xmid, rtb;
+// Float_t KPad::rtbis(float x1, float x2, float xacc)
+// {
+// 	void nrerror(char error_text[]);
+// 	int j;
+// 	float dx, f, fmid, xmid, rtb;
 
-	f = PoEqSolve(x1);
-	fmid = PoEqSolve(x2);
-	if (f * fmid >= 0.0)
-		nrerror("Root must be bracketed for bisection in rtbis");
-	rtb = f < 0.0 ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
-	for (j = 1; j <= JMAX; j++)
-	{
-		//xmid find a good electric field intial value
-		fmid = PoEqSolve(xmid = rtb + (dx *= 0.5));
-		// fmid is the electric field at the readout electrodes
-		if (fmid <= 0.0)
-			rtb = xmid;
-		if (fabs(dx) < xacc || fmid == 0.0)
-			return rtb;
-	}
-	nrerror("Too many bisections in rtbis");
-	return 0.0;
-}
-void KPad::rk4(float y[], float dydx[], int n, float x, float h, float yout[])
-{
-	float *vector(long, long);
-	void free_vector(float *, long, long);
-	int i;
-	float xh, hh, h6, *dym, *dyt, *yt;
+// 	f = PoEqSolve(x1);
+// 	fmid = PoEqSolve(x2);
+// 	if (f * fmid >= 0.0)
+// 		nrerror("Root must be bracketed for bisection in rtbis");
+// 	rtb = f < 0.0 ? (dx = x2 - x1, x1) : (dx = x1 - x2, x2);
+// 	for (j = 1; j <= JMAX; j++)
+// 	{
+// 		//xmid find a good electric field intial value
+// 		fmid = PoEqSolve(xmid = rtb + (dx *= 0.5));
+// 		// fmid is the electric field at the readout electrodes
+// 		if (fmid <= 0.0)
+// 			rtb = xmid;
+// 		if (fabs(dx) < xacc || fmid == 0.0)
+// 			return rtb;
+// 	}
+// 	nrerror("Too many bisections in rtbis");
+// 	return 0.0;
+// }
+// void KPad::rk4(float y[], float dydx[], int n, float x, float h, float yout[])
+// {
+// 	float *vector(long, long);
+// 	void free_vector(float *, long, long);
+// 	int i;
+// 	float xh, hh, h6, *dym, *dyt, *yt;
 
-	dym = vector(1, n);
-	dyt = vector(1, n);
-	yt = vector(1, n);
-	hh = h * 0.5;
-	h6 = h / 6.0;
-	xh = x + hh;
-	for (i = 1; i <= n; i++)
-		yt[i] = y[i] + hh * dydx[i];
-	Derivs(xh, yt, dyt);
-	for (i = 1; i <= n; i++)
-		yt[i] = y[i] + hh * dyt[i];
-	Derivs(xh, yt, dym);
-	for (i = 1; i <= n; i++)
-	{
-		yt[i] = y[i] + h * dym[i];
-		dym[i] += dyt[i];
-	}
-	Derivs(x + h, yt, dyt);
-	for (i = 1; i <= n; i++)
-		yout[i] = y[i] + h6 * (dydx[i] + dyt[i] + 2.0 * dym[i]);
-	free_vector(yt, 1, n);
-	free_vector(dyt, 1, n);
-	free_vector(dym, 1, n);
-}
+// 	dym = vector(1, n);
+// 	dyt = vector(1, n);
+// 	yt = vector(1, n);
+// 	hh = h * 0.5;
+// 	h6 = h / 6.0;
+// 	xh = x + hh;
+// 	for (i = 1; i <= n; i++)
+// 		yt[i] = y[i] + hh * dydx[i];
+// 	Derivs(xh, yt, dyt);
+// 	for (i = 1; i <= n; i++)
+// 		yt[i] = y[i] + hh * dyt[i];
+// 	Derivs(xh, yt, dym);
+// 	for (i = 1; i <= n; i++)
+// 	{
+// 		yt[i] = y[i] + h * dym[i];
+// 		dym[i] += dyt[i];
+// 	}
+// 	Derivs(x + h, yt, dyt);
+// 	for (i = 1; i <= n; i++)
+// 		yout[i] = y[i] + h6 * (dydx[i] + dyt[i] + 2.0 * dym[i]);
+// 	free_vector(yt, 1, n);
+// 	free_vector(dyt, 1, n);
+// 	free_vector(dym, 1, n);
+// }
 
-void KPad::GetRamoField()
+void KPad::Get_Fenics_Field()
 {
-	Int_t i, j;
-	Double_t *x = new Double_t[nx * ny + 1];
-	for (j = 1; j <= ny; j++)
+	//read the electric field and potential
+
+	TFile *rootfile = new TFile("python/fenics_2Dpossion.root");
+	TTree *mytree = (TTree *)rootfile->Get("tree");
+	Double_t sen_depth, E_ele, P_w_ele, P_ele;
+	Int_t i, j, Events;
+	mytree->SetBranchAddress("sen_depth", &sen_depth);
+	mytree->SetBranchAddress("E_ele", &E_ele);
+	mytree->SetBranchAddress("P_w_ele", &P_w_ele);
+	mytree->SetBranchAddress("P_ele", &P_ele);
+	mytree->SetBranchAddress("Events", &Events);
+	
+	Double_t *W_potential = new Double_t[nx * ny + 1];
+	Double_t *E_potential = new Double_t[nx * ny + 1];
+
+	PhyPot = TArrayF(ny);
+	PhyField = TArrayF(ny);
+
+    for(Int_t j=0 ; j<mytree->GetEntries() ; j++)
 	{
+
+        mytree->GetEntry(j);
+		PhyPot[j]=P_ele; //plot electric potential graph
+		PhyField[j]=E_ele; //plot electric field
+
 		for (i = 1; i <= nx; i++)
 		{
-			x[i + (j - 1) * nx] = (Double_t)(j - 1) / (Double_t)(ny - 1);
-			
+			W_potential[i + j*nx] = P_w_ele;
+			E_potential[i + j*nx] = P_ele;
 		}
-	}
-	Ramo->U = MapToGeometry(x);
-	Ramo->CalField();
-	delete[] x;
+    }	
+	Ramo->U = MapToGeometry(W_potential);
+	Ramo->CalField();	//weighting potential->weighting electric field
+	Real->U = MapToGeometry(E_potential);
+	Real->CalField(); //potential->electric field
+	delete[] W_potential;
+	delete[] E_potential;
 }
 
-void KPad::GetField()
-{
-	Int_t i, j;
-	//Float_t Step=1;
-	Float_t aa;
-	PhyPot = TArrayF(ny + 2);
-	PhyField = TArrayF(ny + 2);
-	Double_t *x = new Double_t[nx * ny + 1];
-	//TArrayD PhyPot2D(nx*ny+1);
-	//TArrayI StripPosition=TArrayI(2); StripPosition[0]=1; StripPosition[1]=nx;
+// void KPad::GetField()
+// {
+// 	Int_t i, j;
+// 	//Float_t Step=1;
+// 	Float_t aa;
+// 	PhyPot = TArrayF(ny + 2);
+// 	PhyField = TArrayF(ny + 2);
+// 	Double_t *x = new Double_t[nx * ny + 1];
+// 	//TArrayD PhyPot2D(nx*ny+1);
+// 	//TArrayI StripPosition=TArrayI(2); StripPosition[0]=1; StripPosition[1]=nx;
 
-	aa = rtbis(-100, 100, 0.000001);
-	//if(!Invert && GetDepletionVoltage()>Voltage) aa=rtbis(1,300,0.000001); else aa=rtbis(-10,10,0.000001);
+// 	aa = rtbis(-100, 100, 0.000001);
+// 	//if(!Invert && GetDepletionVoltage()>Voltage) aa=rtbis(1,300,0.000001); else aa=rtbis(-10,10,0.000001);
 
-	for (j = 1; j <= ny; j++)
-		for (i = 1; i <= nx; i++)
-		{
-			x[i + (j - 1) * nx] = (Double_t)PhyPot[j - 1];
-		}
-	//Real=EField(PhyPot2D,nx,ny);
-	//Real->CalField(Step,1);
+// 	for (j = 1; j <= ny; j++)
+// 		for (i = 1; i <= nx; i++)
+// 		{
+// 			x[i + (j - 1) * nx] = (Double_t)PhyPot[j - 1];
+// 		}
+// 	//Real=EField(PhyPot2D,nx,ny);
+// 	//Real->CalField(Step,1);
 
-	// for(i=0;i<nx*ny+1;i++)     {printf("%f ",PhyPot2D[i]); if(i%nx==0) printf("\n");}
+// 	// for(i=0;i<nx*ny+1;i++)     {printf("%f ",PhyPot2D[i]); if(i%nx==0) printf("\n");}
 
-	Real->U = MapToGeometry(x);
-	Real->CalField();
-	delete[] x;
-}
+// 	Real->U = MapToGeometry(x);
+// 	Real->CalField();
+// 	delete[] x;
+// }
 
 TGraph *KPad::DrawPad(char *option)
 {
   //Draws potential "p" or  electric field "f"
 	Char_t Opt[10];
 	TGraph *gr;
-	TArrayF xx=TArrayF(ny+1);
- 	for(Int_t i=0;i<=ny;i++) xx[i]=(Float_t)i*GetStepSize(1,i);
+	TArrayF xx=TArrayF(ny);
+ 	for(Int_t i=0;i<ny;i++) xx[i]=(Float_t)i*GetStepSize(1,i);
 
-	if(strchr(option,'p')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyPot.GetArray());
-	if(strchr(option,'f')!=NULL) gr=new TGraph(ny+1,xx.GetArray(),PhyField.GetArray());
+	if(strchr(option,'p')!=NULL) gr=new TGraph(ny,xx.GetArray(),PhyPot.GetArray());
+	if(strchr(option,'f')!=NULL) gr=new TGraph(ny,xx.GetArray(),PhyField.GetArray());
 	if(strchr(option,'s')!=NULL) sprintf(Opt,"CP"); else  sprintf(Opt,"ACP"); 
 	//if(! strcmp(option,"p")) gr=new TGraph(ny,xx.GetArray(),PhyPot.GetArray());
 	//if(! strcmp(option,"f")) gr=new TGraph(ny,xx.GetArray(),PhyField.GetArray());
@@ -2789,8 +2811,8 @@ TGraph * get_graph_from_log(TString inputFile, TString& err_msg) {
 	if ( i_v150 < 2E-6) pass1 = true;
 	if ( i_v150/i_v100 < 2 ) pass2 = true;
 
-	if (!pass1) err_msg = Form("I(150V) >= 2uA (%.1e)",i_v150) ;
-	if (!pass2) err_msg += Form("I(150V)/I(100V) >= 2 (%.1f)", i_v150/i_v100) ;
+	// if (!pass1) err_msg = Form("I(150V) >= 2uA (%.1e)",i_v150) ;
+	// if (!pass2) err_msg += Form("I(150V)/I(100V) >= 2 (%.1f)", i_v150/i_v100) ;
 
 	in.close();
 	TGraph *gr = new TGraph(nlines, &voltages[0], &currents[0]);
@@ -2822,8 +2844,8 @@ TCanvas* drawIV(std::vector<TString> inputFiles){
 		if (color >= 5) color ++; // bypass the yellow  
 		if (color >= 10) color = color % 10 + 1 ; // reuse the first 9 colors
 		gr->SetMarkerColor(color);
-		leg->AddEntry(gr, Form("%s %s", inputFiles[i].Data(),
-					err_msg.Data()), "p"); 
+		// leg->AddEntry(gr, Form("%s %s", inputFiles[i].Data(),
+		// 			err_msg.Data()), "p"); 
 		mg->Add(gr); 
 	}
 
@@ -2864,6 +2886,7 @@ public:
 	void RCshape(Double_t, Double_t, Double_t, TH1F *, Int_t = 0);
 	void CRshape(Double_t, Double_t, Double_t, TH1F *, Int_t = 0);
 	Double_t CSAamp(TH1F *his, Double_t, Double_t, Double_t, Double_t, Double_t, Double_t);
+	Double_t BBamp(TH1F *his, Double_t, Double_t, Double_t, Double_t, Double_t, Double_t);
 };
 
 
@@ -2938,6 +2961,7 @@ Double_t KElec::CSAamp(TH1F *histo, Double_t TRise, Double_t TFall, Double_t C_d
 			itot[i]=histo->GetBinContent(i);
 			PreAmp_Q[i] = itot[i] * TIMEUNIT;
 			qtot += itot[i] * TIMEUNIT;
+			
 			//histo->SetBinContent(i,PreAmp_Q[i]);   // induced charge each step
 		}
 		else if (i == 0)
@@ -2947,7 +2971,7 @@ Double_t KElec::CSAamp(TH1F *histo, Double_t TRise, Double_t TFall, Double_t C_d
 		}
 		// Iout_temp reproduces correctly Speiler pag 127//
 	}
-
+	std::cout << "TIMEUNIT:" << TIMEUNIT << std::endl;
 	// get the CSA charge.   transfer induced charge to CAS charge
 	for (int i = 0; i < IMaxSh - Step; i += Step)
 	{
@@ -2973,10 +2997,14 @@ Double_t KElec::CSAamp(TH1F *histo, Double_t TRise, Double_t TFall, Double_t C_d
 	for (int i = 0; i < IMaxSh; i += Step)
 	{
 		if (SC_CSAOn)
+		{
 			ShaperOut_V[i] = ShaperOut_Q[i] * CSATransImp * 1e15 * qtot / sh_max; // [mV/fQ *Q/Q]
+			//ShaperOut_V[i] = ShaperOut_Q[i] * 4700 / TIMEUNIT * 1000; //read by yuhang
+			//cout << "qtot / sh_max:" << qtot/sh_max << endl;
+		}
 		else
 			ShaperOut_V[i] = ShaperOut_Q[i] * CSATransImp * 1e15 * qtot * Qfrac / sh_max; // [mV/fQ *Q/Q]											  //cout << ShaperOut_V[i] << endl;
-		histo->SetBinContent(i, fabs(ShaperOut_V[i]));
+		histo->SetBinContent(i, ShaperOut_V[i]);										  // induced charge each step
 	}
 
 	sh_max = 0.;
@@ -3026,6 +3054,7 @@ Double_t KElec::CSAamp(TH1F *histo, Double_t TRise, Double_t TFall, Double_t C_d
 			{
 				Jitter = CSA_Noise / dVdt; // in ns
 				Jit = gRandom->Gaus(0, Jitter);
+				std::cout << "Jit:" << Jit << std::endl;
 			}
 			thre_time=STime+Jit;
 		}
@@ -3042,7 +3071,147 @@ Double_t KElec::CSAamp(TH1F *histo, Double_t TRise, Double_t TFall, Double_t C_d
 
 	delete whisto;
 	return thre_time;
+}
+
+Double_t KElec::BBamp(TH1F *histo, Double_t C_detector, Double_t BBGain, Double_t BBImp, Double_t BBBW, Double_t BB_noise, Double_t BBVth)
+{
+	//test graph//
+	TH1F *whisto = new TH1F();
+	histo->Copy(*whisto);
+	int IMaxSh = histo->GetNbinsX();
+	int Step = 1;
+	int DStep = Step;
+	float Qdif_Shaper = 0;
+	double tau_BB_RC;
+	double tau_BB_BW;
+	double tau_BBA;
+
+
+	double *itot = new double[IMaxSh];
+	double *PreAmp_Q = new double[IMaxSh];
+	double *BBGraph = new double[IMaxSh];
+	double *Iout_BB_RC = new double[IMaxSh];
+
+	double BBout_max = 0.0;
+	double BBout_min = 0.0;
+	int NMax_BB = 0;
+	int Nmin_BB = 0;
+	double thre_time = 0.0;
+
+	double qtot = 0;
+
+	//test graph //
+	tau_BB_RC = 1.0e-12 * BBImp * C_detector;	  // BB RC
+	tau_BB_BW = 0.35 / (1.0e9 * BBBW) / 2.2;	  // BB Tau
+	tau_BBA = sqrt(pow(tau_BB_RC, 2) + pow(tau_BB_BW, 2));
+
+	double TIMEUNIT = (histo->GetXaxis()->GetXmax() - histo->GetXaxis()->GetXmin()) / histo->GetNbinsX();
+
+	for (int k = 0; k < IMaxSh; k++)
+	{
+		PreAmp_Q[k] = 0.0;
+		itot[k] = 0.0;
+		BBGraph[k] = 0.0;
+		Iout_BB_RC[k] = 0.0;
 	}
+
+	//get the induced charge anc current
+	for (int i = 0; i < IMaxSh - Step; i += Step)
+	{
+		if (i > 0)
+		{
+			PreAmp_Q[i] = 0;
+			itot[i] = histo->GetBinContent(i);
+			PreAmp_Q[i] = itot[i] * TIMEUNIT;
+			qtot += itot[i] * TIMEUNIT;
+			//histo->SetBinContent(i,PreAmp_Q[i]);   // induced charge each step
+		}
+		else if (i == 0)
+		{
+			PreAmp_Q[i] = 0; // final scale to zero
+							 //histo->SetBinContent(i, PreAmp_Q[i]);
+		}
+		// Iout_temp reproduces correctly Speiler pag 127//
+	}
+
+	// get the CSA charge.   transfer induced charge to CAS charge
+	for (int i = 0; i < IMaxSh - Step; i += Step)
+	{
+		Qdif_Shaper = PreAmp_Q[i];
+
+		if (Qdif_Shaper != 0)
+			for (int ll = 0; ll < IMaxSh - i; ll += Step) // valid only up to IMaxSh
+			{
+				Iout_BB_RC[i + ll] += (Qdif_Shaper) / tau_BBA * TMath::Exp(-ll * TIMEUNIT / tau_BBA);
+				BBGraph[i+ll] = 50*BBGain*Iout_BB_RC[i+ll]; 					
+			if (fabs(BBGraph[i + ll]) > 800)
+				BBGraph[i + ll] = 800 * BBGraph[i + ll] / fabs(BBGraph[i + ll]);
+			}
+		histo->SetBinContent(i, Iout_BB_RC[i]);
+	}
+
+	for (int i = Step; i < IMaxSh - 2 * Step; i += Step)
+	{
+		if (BBGraph[i] > BBout_max )    
+		{
+		    //		    BBout_max = fabs(BBGraph[i]); 
+		    BBout_max = BBGraph[i]; 
+		    NMax_BB = i;
+		}
+
+		if (BBGraph[i] < BBout_min)    
+		{
+		    BBout_min = BBGraph[i]; 
+		    Nmin_BB = i;
+		}
+	}
+	// // CSA noise
+
+	int NBB_der0 = 0;
+	double BBx1 = 0;
+	double BBJitter = 0;
+	bool BBFVTh = true;
+	float DT = (TIMEUNIT * 1e9 * 2. * DStep);
+	double STime = 0;
+
+	NBB_der0 = (fabs(BBout_max) > fabs(BBout_min)) ? NMax_BB : Nmin_BB;
+
+	TRandom3 r;
+	r.SetSeed(0);
+	BBx1 = r.Gaus(BB_noise, 2.36);
+
+	//histo->Reset();
+
+	for (int i = 2 * DStep; i < IMaxSh - 2 * DStep; i++)
+	{
+		if ((fabs(BBGraph[i]) + BBx1) > fabs(BBVth) && BBFVTh && i < NBB_der0 - 5)
+		{
+			BBJitter = 0;
+			BBFVTh = false;
+			STime = (double)(i)*TIMEUNIT * 1e9;
+			float dVdt = fabs((BBGraph[i+DStep]-BBGraph[i-DStep])/DT); //mV/nSec											 //mV /nSec
+			float Jit = 0;
+			if (dVdt != 0)
+			{
+				BBJitter = BB_noise / dVdt; // in ns
+				Jit = gRandom->Gaus(0, BBJitter);
+			}
+			thre_time = STime + Jit;
+		}
+	}
+	//record the waveform above the threshold
+	// if (!FVTh)
+	// {
+	// 	for (int i = 2 * DStep; i < IMaxSh - 2 * DStep; i++)
+	// 	{
+	// 		CSAx2 = r.Gaus(CSA_Noise, 2.36);
+	// 		//histo->SetBinContent(i,fabs(ShaperOut_V[i]) + CSAx2);
+	// 	}
+	// }
+	delete whisto;
+	return thre_time;
+}
+
 
 void KElec::preamp(Double_t C, Double_t R, TH1F *histo, Double_t cut, Int_t method)
 {
@@ -3152,6 +3321,7 @@ void KElec::CRshape(Double_t C, Double_t R1, Double_t R2, TH1F *histo, Int_t met
 	delete whisto;
 }
 
+
 #ifndef __CINT__ 
 
 void print_usage(){
@@ -3247,29 +3417,45 @@ int main(int argc, char** argv) {
 
 		if (!strcmp(argv[i], "2D"))
 		{
+			// change parameter should also change the python file parameter
+			// // // // // // initialize parameter // // // // // // // //
+			Double_t set_neff = 10.0; //doping concentration n-type is + p-type is negative
+			Double_t set_width = 100.0; //um
+			Double_t set_depth = 100.0; //um
+			Double_t set_voltage = -500.0; //V
+			Double_t set_mesh_step = 0.1; //um		
+
 			TF1 *neff = new TF1("neff", "[0]+x[0]*0", 0, 1000);
-			neff->SetParameter(0, 10);
-			KPad det(100,100);
-			det.Neff = neff;
+			neff->SetParameter(0, set_neff);
+			KPad det(set_width,set_depth);
+			det.Neff2D = neff;
 			det.SetDriftHisto(10e-9, 5000);
-			det.Voltage = -500;
-			det.SetUpVolume(1);
+			det.Voltage = set_voltage;
+			det.SetUpVolume(set_mesh_step);
 			det.SetEntryPoint(50, 0, 0.5); //set entry point of the track
 			det.SetExitPoint(50, 100, 0.5);
+			//python fenics solver electric field and potential
+			std::string filename = "python//fenics_2Dpossion.py ";
+			filename+=std::to_string(set_mesh_step) + " ";
+			filename+=std::to_string(set_depth) + " ";
+			filename+=std::to_string(set_voltage) + " ";
+			filename+=std::to_string(set_neff);
+			std::string command = "python3 ";
+			command += filename;
+			system(command.c_str());
 			det.SetUpElectrodes();
 			det.SStep = 0.1; // set the drift step of e-h pairs
 			det.Temperature = 300; // set the operation temperature
 			
- 			//set exit point of the track
+ 			// set exit point of the track
 			// switch on the diffusion
 			det.diff = 1;
-
 			//--------------------------------------basic information---------------------------------------//
 
 			// TGraph *ElField;						  // electric field
 			// TGraph *ElPotential;					  // electric potential
-			// TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
-			//c2.Divide(2, 3);						  //divide canvas
+			TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
+			// c2.Divide(2, 3);						  //divide canvas
 
 			// // // // // // electic field
 			// c2.cd(1);
@@ -3285,7 +3471,7 @@ int main(int argc, char** argv) {
 			// ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
 			// ElPotential->GetYaxis()->SetTitle("U [V]");
 
-			// // // // // // doping distribution
+			// // // // // // // doping distribution
 			// c2.cd(3);
 			// TF1 *neffGc;
 			// neffGc = neff->DrawCopy();
@@ -3296,7 +3482,8 @@ int main(int argc, char** argv) {
 			// neffGc->GetYaxis()->SetTitleOffset(1.5);
 
 			// // // // // // induced current
-			//c2.cd(4);
+			// c2.cd(4);
+
 			// gStyle->SetOptStat(kFALSE);
 			// det.MipIR(1000);
 			// TH1F *ele_current = (TH1F *)det.sum->Clone();
@@ -3307,19 +3494,21 @@ int main(int argc, char** argv) {
 			// det.neg->Draw("SAME HIST"); //plot electrons' induced current
 			// det.pos->Draw("SAME HIST"); //plot holes' induced current
 			// c2.Update();
+			// // c2.cd(5);
 			// KElec tct;
-			// double test_out=tct.CSAamp(ele_current, 1, 1, 21.7, 0.66, 4, 5);
-			// cout<<test_out<<endl;
-			//tct.preamp(ele_current);
-			// tct.CRshape(40e-12, 50, 10000, ele_current);
-			// // tct.RCshape(40e-12, 50, 10000, ele_current);
-			// // tct.RCshape(40e-12, 50, 10000, ele_current);
-			// // tct.RCshape(40e-12, 50, 10000, ele_current);
-			// float rightmax = 1.1 * ele_current->GetMinimum();
-			// float scale = gPad->GetUymin() / rightmax;
+			// double  CSA_thre_time = tct.CSAamp(ele_current, 0.4, 0.2, 75, 10, 0.66, 3);
+			// // //   double test_out = tct.BBamp(det.sum,75,94,50,2, 0.66,10);
+			// // //   BBamp: C_detector=75pf BBGain=25 BBimp=90ohm BBBW=0.66 BB_noise=0.66, BBVth=10
+			// //  //  tct.preamp(ele_current);
+			// //  //  tct.CRshape(40e-12, 50, 10000, ele_current);
+			// //  //  tct.RCshape(40e-12, 50, 10000, ele_current);
+			// // //   tct.RCshape(40e-12, 50, 10000, ele_current);
+			// // //   tct.RCshape(40e-12, 50, 10000, ele_current);
+			// float rightmax = 1.1*ele_current->GetMinimum();
+			// float scale = gPad->GetUymin() / rightmax*1.05;
 			// ele_current->SetLineColor(6);
 			// ele_current->Scale(scale);
-			//ele_current->Draw("HIST");
+			// ele_current->Draw("HIST SAME");
 			// auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
 			// 					   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
 			// axis->SetLineColor(6);
@@ -3338,13 +3527,13 @@ int main(int argc, char** argv) {
 			// legend->SetBorderSize(0);
 			// legend->Draw();
 
-			// // // // // // charge drift
+			// // // // // // // // // charge drift
 			// c2.cd(5);
-			// det.ShowMipIR(150);
+			det.ShowMipIR(150);
 
-			// // // // // // e-h pairs
+			// // // // // // // // e-h pairs
 			// c2.cd(6);
-			// det.MipIR(5100);
+			//det.MipIR(1000);
 			// det.pairs->Draw("HIST");
 
 			//------------------------------end------------------------------------------------------
@@ -3384,72 +3573,73 @@ int main(int argc, char** argv) {
 			//--------------------------------------end--------------------------------//
 
 
-			// // //--------------------timing scan------------------------------
-			ofstream outfile;
-			outfile.open("time_resolution_2021_4_21.txt");
+			// // // //--------------------timing scan------------------------------
+			// std::ofstream outfile;
+			// outfile.open("out_txt/time_resolution_2021_5_14.txt");
 			
-			TH1F *charge_total = new TH1F("t_charge", "t_charge", 200, -2, 0);
-			TH1F *CSA_time_resolution = new TH1F("CSA_time_resolution", "CSA_time_resolution", 2000, 0, 50);
-			Int_t i=0;
-			do
-			{
-		 	TH1::AddDirectory(kFALSE);
+			// TH1F *charge_total = new TH1F("t_charge", "t_charge", 200, -2, 0);
+			// // TH1F *CSA_time_resolution = new TH1F("CSA_time_resolution", "CSA_time_resolution", 2000, 0, 50);
+			// Int_t i=0;
+			// do
+			// {
+		 	// TH1::AddDirectory(kFALSE);
 
-			// // // induced current
-			TCanvas c4("Plots", "Plots", 1000, 1000);
-			c4.cd();
-			det.MipIR(1000);
-			TH1F *Icurrent = (TH1F *)det.sum->Clone();
-			Icurrent->Draw("HIST");
-			Double_t charge_t;
-			charge_t = Icurrent->Integral() * ((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX()) * 1e15;
-			charge_total->Fill(charge_t);
-			std::cout << "charge:" << charge_t << std::endl;
+			// // // // induced current
+			// TCanvas c4("Plots", "Plots", 1000, 1000);
+			// c4.cd();
+			// det.MipIR(100);
+			// TH1F *Icurrent = (TH1F *)det.sum->Clone();
+			// // Icurrent->Draw("HIST");
+			// Double_t charge_t;
+			// charge_t = Icurrent->Integral() * ((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX()) * 1e15;
+			// charge_total->Fill(charge_t);
+			// std::cout << "charge:" << charge_t << std::endl;
 
-			std::string output;
-			output = "out/sic_2021_4_21_ic/sic_events_" + std::to_string(i) + ".C";
-			const char *out = output.c_str();
-			c4.SaveAs(out);
+			// // std::string output;
+			// // output = "out/sic_2021_4_26_ic_angle/sic_events_" + std::to_string(i) + ".C";
+			// // const char *out = output.c_str();
+			// // c4.SaveAs(out);
 
-			c4.Update();
-			// //current after electric
-			TCanvas c5("Plots", "Plots", 1000, 1000);
-			c5.cd();
-			KElec tct;
-			Double_t CSA_thre_time = tct.CSAamp(det.sum, 0.3, 0.6, 75, 10, 0.66, 3);
-			// // taurise=1ns taufall=1ns  detector capacitance=75 pF  CSATransImp=10
-			// // CSA noise=0.66  CSA_threshold=3
+			// c4.Update();
+			// // //current after electric
+			// TCanvas c5("Plots", "Plots", 1000, 1000);
+			// c5.cd();
+			// KElec tct;
+			// double CSA_thre_time = tct.CSAamp(det.sum, 0.4, 0.2, 75, 10, 0.66, 3);
+			// // // taurise=1ns taufall=1ns  detector capacitance=75 pF  CSATransImp=10
+			// // // CSA noise=0.66  CSA_threshold=3
 
-			std::cout << "CSA_thre_time:" << CSA_thre_time << std::endl;
-			CSA_time_resolution->Fill(CSA_thre_time);
-			//outfile<<CSA_thre_time<<endl;
-			// //tct.preamp(det.sum);
-			// // tct.CRshape(40e-12, 50, 10000, det.sum);
-			// // tct.RCshape(40e-12, 50, 10000, det.sum);
-			// // tct.RCshape(40e-12, 50, 10000, det.sum);
-			// // tct.RCshape(40e-12, 50, 10000, det.sum);
-			det.sum->Draw("HIST");
+			// // std::cout << "CSA_thre_time:" << CSA_thre_time << std::endl;
+			// // if (CSA_thre_time!=0)
+			// // 	CSA_time_resolution->Fill(CSA_thre_time);
+			// // outfile<<CSA_thre_time<<std::endl;
+			// // //tct.preamp(det.sum);
+			// // // tct.CRshape(40e-12, 50, 10000, det.sum);
+			// // // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// // // tct.RCshape(40e-12, 50, 10000, det.sum);
+			// det.sum->Draw("HIST");
 
-			std::string output_1;
-			output_1 = "out/sic_2021_4_21_ec/sic_events_" + std::to_string(i)+".C";
-			const char *out_1 = output_1.c_str();
-			c5.SaveAs(out_1);
-			std::cout<<output_1<<std::endl;
-			i++;
+			// std::string output_1;
+			// output_1 = "out/sic_2021_5_14_fenics_ec/sic_events_" + std::to_string(i)+".C";
+			// const char *out_1 = output_1.c_str();
+			// c5.SaveAs(out_1);
+			// std::cout<<output_1<<std::endl;
+			// i++;
 
-			} while (i<3000);
+			// } while (i<5000);
 			
-			///////////////e-h pairs
-			TCanvas c6("Plots", "Plots", 1000, 1000);
-			c6.cd();
-			charge_total->Draw("HIST");
-			c6.SaveAs("eh_pairs.pdf");
+			// ///////////////e-h pairs 
+			// TCanvas c6("Plots", "Plots", 1000, 1000);
+			// c6.cd();
+			// charge_total->Draw("HIST");
+			// c6.SaveAs("out_txt/eh_pairs_5_14.pdf");
 
-			TCanvas c7("Plots", "Plots", 1000, 1000);
-			c7.cd();
-			CSA_time_resolution->Draw("HIST");
-			c7.SaveAs("time_resolution_2021_4_21.pdf");
-			outfile.close();
+			// TCanvas c7("Plots", "Plots", 1000, 1000);
+			// c7.cd();
+			// CSA_time_resolution->Draw("HIST");
+			// c7.SaveAs("out_txt/time_resolution_2021_5_14.pdf");
+			// outfile.close();
 
 			// --------------------end---------------
 

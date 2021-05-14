@@ -10,6 +10,7 @@ SetUpVolume=float(args[0])  #um
 detector_y=float(args[1])
 det_voltage=float(args[2])
 Neff=-float(args[3])#/cm3   //n type is negetive and p type is positive
+out_root=args[4]#/cm3 
 print(args)
 nx=1
 perm_sic=9.76
@@ -53,7 +54,7 @@ solve(a == L, u, bc)
 u_w_D = Expression('x[1] < tol? 0 : 1', degree=2,tol=1E-14)
 
 def boundary_w(x, on_boundary):
-    return abs(x[1])<tol or abs(x[1]-100)<tol
+    return abs(x[1])<tol or abs(x[1]-detector_y)<tol
 bc_w = DirichletBC(V, u_w_D, boundary_w)
 
 # # Define variational problem
@@ -80,7 +81,7 @@ E_ele[0]=0.0
 P_w_ele[0]=0.0
 P_ele[0]=0.0
 
-outfile="python/fenics_2Dpossion.root"
+outfile="python/"+out_root
 out_file=ROOT.TFile(outfile,"RECREATE")
 tree_out=ROOT.TTree('tree','tree')
 tree_out.Branch('Events',Events,'Events/I')

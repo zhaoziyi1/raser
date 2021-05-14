@@ -8,7 +8,6 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-
 #include <TROOT.h>
 #include <TSystem.h>
 #include <TString.h>
@@ -2484,8 +2483,8 @@ public:
    KPad(Float_t=50,Float_t=301);
   ~KPad(); 
    	void SetUpVolume(Float_t,Int_t =0); 
-	void SetUpElectrodes();
-	void Get_Fenics_Field();
+	void SetUpElectrodes(std::string);
+	void Get_Fenics_Field(std::string);
 	// void GetField();
 	TGraph   *DrawPad(char*);
 };
@@ -2567,7 +2566,7 @@ void KPad::SetUpVolume(Float_t St1, Int_t Mat)
         	DM->SetBinContent(i,j,1,Mat);
 }
 
-void KPad::SetUpElectrodes()
+void KPad::SetUpElectrodes(std::string out_path)
 {
  
  	for(int i=1;i<=nx;i++){ EG->SetBinContent(i,1,1,2);  EG->SetBinContent(i,ny,1,16385);} 
@@ -2579,7 +2578,7 @@ void KPad::SetUpElectrodes()
  	if(Neff2D!=NULL )
  	{
 		//GetField();
-		Get_Fenics_Field();
+		Get_Fenics_Field(out_path);
  	}
  	else 
    		printf("Please define space charge function Neff before field calculation\n");
@@ -2642,11 +2641,11 @@ void KPad::SetUpElectrodes()
 // 	free_vector(dym, 1, n);
 // }
 
-void KPad::Get_Fenics_Field()
+void KPad::Get_Fenics_Field(std::string out_path)
 {
 	//read the electric field and potential
-
-	TFile *rootfile = new TFile("python/fenics_2Dpossion.root");
+	std::string out_root="python/"+out_path;
+	TFile *rootfile = new TFile(out_root.c_str());
 	TTree *mytree = (TTree *)rootfile->Get("tree");
 	Double_t sen_depth, E_ele, P_w_ele, P_ele;
 	Int_t i, j, Events;
@@ -3414,16 +3413,20 @@ int main(int argc, char** argv) {
 			c3.SaveAs("txt/Si_induced_current.C");
 			//theApp.Run();
 		} // End "3D"
-
-		if (!strcmp(argv[i], "2D"))
+		if (!strcmp(argv[i], "2Dscan"))
 		{
-			// change parameter should also change the python file parameter
+			Int_t j=0;
+			do
+			{
+			
 			// // // // // // initialize parameter // // // // // // // //
 			Double_t set_neff = 10.0; //doping concentration n-type is + p-type is negative
 			Double_t set_width = 100.0; //um
 			Double_t set_depth = 100.0; //um
 			Double_t set_voltage = -500.0; //V
-			Double_t set_mesh_step = 0.1; //um		
+			Double_t set_mesh_step = 0.1; //um	
+			set_depth = set_depth-j*10;
+			std::string out_root_electric="fenics_2Dpossion_"+std::to_string(set_depth)+".root";
 
 			TF1 *neff = new TF1("neff", "[0]+x[0]*0", 0, 1000);
 			neff->SetParameter(0, set_neff);
@@ -3439,11 +3442,138 @@ int main(int argc, char** argv) {
 			filename+=std::to_string(set_mesh_step) + " ";
 			filename+=std::to_string(set_depth) + " ";
 			filename+=std::to_string(set_voltage) + " ";
-			filename+=std::to_string(set_neff);
+			filename+=std::to_string(set_neff) + " ";
+			filename+=out_root_electric;
 			std::string command = "python3 ";
 			command += filename;
 			system(command.c_str());
-			det.SetUpElectrodes();
+			det.SetUpElectrodes(out_root_electric);
+			det.SStep = 0.1; // set the drift step of e-h pairs
+			det.Temperature = 300; // set the operation temperature
+			
+ 			// set exit point of the track
+			// switch on the diffusion
+			det.diff = 1;
+
+			// // // //--------------------timing scan------------------------------
+			// std::ofstream outfile;
+			// outfile.open("out_txt/time_resolution_2021_5_14.txt");
+			
+			// TH1F *charge_total = new TH1F("t_charge", "t_charge", 200, -2, 0);
+			// TH1F *CSA_time_resolution = new TH1F("CSA_time_resolution", "CSA_time_resolution", 2000, 0, 50);
+
+			Int_t i=0;
+			do
+			{
+		 	TH1::AddDirectory(kFALSE);
+			// // // induced current
+			TCanvas c4("Plots", "Plots", 1000, 1000);
+			c4.cd();
+			det.MipIR(100);
+			//save current
+			TH1F *Icurrent = (TH1F *)det.sum->Clone();
+			// Icurrent->Draw("HIST");
+			Double_t charge_t;
+			charge_t = Icurrent->Integral() * ((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX()) * 1e15;
+			// charge_total->Fill(charge_t);
+			std::cout << "charge:" << charge_t << std::endl;
+			// // // std::string output;
+			// // output = "out/sic_2021_4_26_ic_angle/sic_events_" + std::to_string(i) + ".C";
+			//  //const char *out = output.c_str();
+			// // c4.SaveAs(out);
+			// c4.Update();
+			// //current after electric
+
+			TCanvas c5("Plots", "Plots", 1000, 1000);
+			c5.cd();
+			KElec tct;
+			double CSA_thre_time = tct.CSAamp(det.sum, 0.4, 0.2, 75, 10, 0.66, 3);
+			// // taurise=1ns taufall=1ns  detector capacitance=75 pF  CSATransImp=10
+			// // CSA noise=0.66  CSA_threshold=3
+			// /// // // // // std::cout << "CSA_thre_time:" << CSA_thre_time << std::endl;
+			// /// // // // // if (CSA_thre_time!=0)
+			// /// // // // // 	CSA_time_resolution->Fill(CSA_thre_time);
+			// // // // outfile<<CSA_thre_time<<std::endl;
+			// //tct.preamp(det.sum);
+			// // tct.CRshape(40e-12, 50, 10000, det.sum);
+			det.sum->Draw("HIST");
+
+			std::string output_name;
+			output_name = "/home/physicist/out/sic_2021_5_14_fenics_ec_"+std::to_string(set_depth);
+			std::string command_rm = "rm -rf ";
+			std::string command_mk = "mkdir ";
+			command_rm += output_name;
+			command_mk += output_name + " -p";
+			system(command_rm.c_str());
+			system(command_mk.c_str());
+			// if (access(output_name.c_str(), 0) == -1)
+        	// if (mkdir(output_name.data()))
+			// {
+			// 	std::string command_temp = "rd /S /Q ";
+			// 	command_temp.append(output_name);
+			// 	system(command_temp.data());
+			// };
+			output_name += "/sic_events_" + std::to_string(i)+".C";
+			const char *out_1 = output_name.c_str();
+			c5.SaveAs(out_1);
+			std::cout<<output_name<<std::endl;
+			i++;
+
+			} while (i<1);
+			
+			///////////////e-h pairs 
+			// // TCanvas c6("Plots", "Plots", 1000, 1000);
+			// // c6.cd();
+			// // charge_total->Draw("HIST");
+			// // c6.SaveAs("out_txt/eh_pairs_5_14.pdf");
+
+			// /// // // // TCanvas c7("Plots", "Plots", 1000, 1000);
+			// /// // // // c7.cd();
+			// /// // // // CSA_time_resolution->Draw("HIST");
+			// /// // // // c7.SaveAs("out_txt/time_resolution_2021_5_14.pdf");
+			// // outfile.close();
+
+			// --------------------end---------------
+			j++;
+			} while (j<8);
+
+		theApp.Run();
+
+		}
+
+
+		if (!strcmp(argv[i], "2D"))
+		{
+			// change parameter should also change the python file parameter
+
+			// // // // // // initialize parameter // // // // // // // //
+			Double_t set_neff = 10.0; //doping concentration n-type is + p-type is negative
+			Double_t set_width = 100.0; //um
+			Double_t set_depth = 100.0; //um
+			Double_t set_voltage = -500.0; //V
+			Double_t set_mesh_step = 0.1; //um		
+			std::string out_root_electric="fenics_2Dpossion_"+std::to_string(set_depth)+".root";
+			
+			TF1 *neff = new TF1("neff", "[0]+x[0]*0", 0, 1000);
+			neff->SetParameter(0, set_neff);
+			KPad det(set_width,set_depth);
+			det.Neff2D = neff;
+			det.SetDriftHisto(10e-9, 5000);
+			det.Voltage = set_voltage;
+			det.SetUpVolume(set_mesh_step);
+			det.SetEntryPoint(50, 0, 0.5); //set entry point of the track
+			det.SetExitPoint(50, 100, 0.5);
+			//python fenics solver electric field and potential
+			std::string filename = "python//fenics_2Dpossion.py ";
+			filename+=std::to_string(set_mesh_step) + " ";
+			filename+=std::to_string(set_depth) + " ";
+			filename+=std::to_string(set_voltage) + " ";
+			filename+=std::to_string(set_neff) + " ";
+			filename+=out_root_electric;
+			std::string command = "python3 ";
+			command += filename;
+			system(command.c_str());
+			det.SetUpElectrodes(out_root_electric);
 			det.SStep = 0.1; // set the drift step of e-h pairs
 			det.Temperature = 300; // set the operation temperature
 			
@@ -3452,196 +3582,85 @@ int main(int argc, char** argv) {
 			det.diff = 1;
 			//--------------------------------------basic information---------------------------------------//
 
-			// TGraph *ElField;						  // electric field
-			// TGraph *ElPotential;					  // electric potential
-			TCanvas c2("Plots", "Plots", 1400, 1000); //open canvas
-			// c2.Divide(2, 3);						  //divide canvas
+			TGraph *ElField;						  // electric field
+			TGraph *ElPotential;					  // electric potential
+ 			TCanvas c2("Plots", "Plots", 1000, 1000);
+			c2.Divide(2, 3);						  //divide canvas
 
-			// // // // // // electic field
-			// c2.cd(1);
-			// ElField = det.DrawPad("f");
-			// ElField->SetTitle("Electric field");
-			// ElField->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
-			// ElField->GetYaxis()->SetTitle("E [V/#mum]");
+			// // // // // electic field
+			c2.cd(1);
+			ElField = det.DrawPad("f");
+			ElField->SetTitle("Electric field");
+			ElField->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			ElField->GetYaxis()->SetTitle("E [V/#mum]");
 
-			// // // // // // electric potential  or weighting potential ???
-			// c2.cd(2);
-			// ElPotential=det.DrawPad("p");
-			// ElPotential->SetTitle("Electric Potential");
-			// ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
-			// ElPotential->GetYaxis()->SetTitle("U [V]");
+			// // // // // electric potential  or weighting potential ???
+			c2.cd(2);
+			ElPotential=det.DrawPad("p");
+			ElPotential->SetTitle("Electric Potential");
+			ElPotential->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			ElPotential->GetYaxis()->SetTitle("U [V]");
 
-			// // // // // // // doping distribution
-			// c2.cd(3);
-			// TF1 *neffGc;
-			// neffGc = neff->DrawCopy();
-			// neffGc->SetRange(0, 21);
-			// neffGc->SetTitle("Doping profile (full detector)");
-			// neffGc->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
-			// neffGc->GetYaxis()->SetTitle("N_{eff} [10^{12} cm^{-3}]");
-			// neffGc->GetYaxis()->SetTitleOffset(1.5);
+			// // // // // // doping distribution
+			c2.cd(3);
+			TF1 *neffGc;
+			neffGc = neff->DrawCopy();
+			neffGc->SetRange(0, 21);
+			neffGc->SetTitle("Doping profile (full detector)");
+			neffGc->GetXaxis()->SetTitle("depth [#mum] (0 is voltage applied electrode)");
+			neffGc->GetYaxis()->SetTitle("N_{eff} [10^{12} cm^{-3}]");
+			neffGc->GetYaxis()->SetTitleOffset(1.5);
 
-			// // // // // // induced current
-			// c2.cd(4);
+			// // // // // induced current
+			c2.cd(4);
 
-			// gStyle->SetOptStat(kFALSE);
-			// det.MipIR(1000);
-			// TH1F *ele_current = (TH1F *)det.sum->Clone();
-			// det.sum->SetLineColor(3);
-			// det.neg->SetLineColor(4);
-			// det.pos->SetLineColor(2);
-			// det.sum->Draw("HIST");		//plot total induced current
-			// det.neg->Draw("SAME HIST"); //plot electrons' induced current
-			// det.pos->Draw("SAME HIST"); //plot holes' induced current
-			// c2.Update();
-			// // c2.cd(5);
-			// KElec tct;
-			// double  CSA_thre_time = tct.CSAamp(ele_current, 0.4, 0.2, 75, 10, 0.66, 3);
-			// // //   double test_out = tct.BBamp(det.sum,75,94,50,2, 0.66,10);
-			// // //   BBamp: C_detector=75pf BBGain=25 BBimp=90ohm BBBW=0.66 BB_noise=0.66, BBVth=10
-			// //  //  tct.preamp(ele_current);
-			// //  //  tct.CRshape(40e-12, 50, 10000, ele_current);
-			// //  //  tct.RCshape(40e-12, 50, 10000, ele_current);
-			// // //   tct.RCshape(40e-12, 50, 10000, ele_current);
-			// // //   tct.RCshape(40e-12, 50, 10000, ele_current);
-			// float rightmax = 1.1*ele_current->GetMinimum();
-			// float scale = gPad->GetUymin() / rightmax*1.05;
-			// ele_current->SetLineColor(6);
-			// ele_current->Scale(scale);
-			// ele_current->Draw("HIST SAME");
-			// auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
-			// 					   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
-			// axis->SetLineColor(6);
-			// axis->SetTextColor(6);
-			// axis->SetTextSize(0.02);
-			// axis->SetLabelColor(6);
-			// axis->SetLabelSize(0.02);
-			// axis->SetTitle("ampl(mV)");
-			// axis->Draw();
+			gStyle->SetOptStat(kFALSE);
+			det.MipIR(1000);
+			TH1F *ele_current = (TH1F *)det.sum->Clone();
+			det.sum->SetLineColor(3);
+			det.neg->SetLineColor(4);
+			det.pos->SetLineColor(2);
+			det.sum->Draw("HIST");		//plot total induced current
+			det.neg->Draw("SAME HIST"); //plot electrons' induced current
+			det.pos->Draw("SAME HIST"); //plot holes' induced current
+			c2.Update();
+			KElec tct;
+			double  CSA_thre_time = tct.CSAamp(ele_current, 0.4, 0.2, 75, 10, 0.66, 3);
+			// //   double test_out = tct.BBamp(det.sum,75,94,50,2, 0.66,10);
+			// //   BBamp: C_detector=75pf BBGain=25 BBimp=90ohm BBBW=0.66 BB_noise=0.66, BBVth=10
+			//  //  tct.preamp(ele_current);
+			//  //  tct.CRshape(40e-12, 50, 10000, ele_current);
+			float rightmax = 1.1*ele_current->GetMinimum();
+			float scale = gPad->GetUymin() / rightmax*1.0;
+			ele_current->SetLineColor(6);
+			ele_current->Scale(scale);
+			ele_current->Draw("HIST SAME");
+			auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
+								   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
+			axis->SetLineColor(6);
+			axis->SetTextColor(6);
+			axis->SetTextSize(0.02);
+			axis->SetLabelColor(6);
+			axis->SetLabelSize(0.02);
+			axis->SetTitle("ampl(mV)");
+			axis->Draw();
 
-			// auto legend = new TLegend(0.6, 0.3, 0.9, 0.6);
-			// legend->AddEntry(det.sum, "sum", "l");
-			// legend->AddEntry(det.neg, "electron", "l");
-			// legend->AddEntry(det.pos, "hole", "l");
-			// legend->AddEntry(ele_current, "current after electric", "l");
-			// legend->SetBorderSize(0);
-			// legend->Draw();
+			auto legend = new TLegend(0.6, 0.3, 0.9, 0.6);
+			legend->AddEntry(det.sum, "sum", "l");
+			legend->AddEntry(det.neg, "electron", "l");
+			legend->AddEntry(det.pos, "hole", "l");
+			legend->AddEntry(ele_current, "current after electric", "l");
+			legend->SetBorderSize(0);
+			legend->Draw();
 
 			// // // // // // // // // charge drift
-			// c2.cd(5);
+			c2.cd(5);
 			det.ShowMipIR(150);
 
 			// // // // // // // // e-h pairs
-			// c2.cd(6);
-			//det.MipIR(1000);
-			// det.pairs->Draw("HIST");
-
-			//------------------------------end------------------------------------------------------
-
-
-			//----------------------------current before electric and after electric---------------------------------------//
-			
-			// TCanvas c3("Plots", "Plots", 1000, 1000);
-			// det.MipIR(50);
-			// TH1F *Icurrent = (TH1F *)det.sum->Clone();
-			// Icurrent->SetLineColor(2);
-			// Icurrent->SetTitle("induced current");
-			// Icurrent->Draw("HIST");
-			// c3.Update();
-			// KElec tct;
-			// tct.preamp(det.sum);
-			// tct.CRshape(40e-12, 50, 10000, det.sum);
-			// // tct.RCshape(40e-12, 50, 10000, det.sum);
-			// // tct.RCshape(40e-12, 50, 10000, det.sum);
-			// // tct.RCshape(40e-12, 50, 10000, det.sum);
-			// det.sum->Scale(1000);
-			// float rightmax = 1.1 * det.sum->GetMinimum();
-			// float scale = gPad->GetUymin() / rightmax;
-			// det.sum->SetLineColor(4);
-			// det.sum->Scale(scale);
-			// det.sum->Draw("HIST SAME");
-			// auto axis = new TGaxis(gPad->GetUxmax(), gPad->GetUymin(),
-			// 					   gPad->GetUxmax(), gPad->GetUymax(), rightmax, 0, 510, "+L");
-			// axis->SetLineColor(4);
-			// axis->SetTextColor(4);
-			// axis->SetTextSize(0.02);
-			// axis->SetLabelColor(4);
-			// axis->SetLabelSize(0.02);
-			// axis->SetTitle("ampl(mV)");
-			// axis->Draw();
-
-			//--------------------------------------end--------------------------------//
-
-
-			// // // //--------------------timing scan------------------------------
-			// std::ofstream outfile;
-			// outfile.open("out_txt/time_resolution_2021_5_14.txt");
-			
-			// TH1F *charge_total = new TH1F("t_charge", "t_charge", 200, -2, 0);
-			// // TH1F *CSA_time_resolution = new TH1F("CSA_time_resolution", "CSA_time_resolution", 2000, 0, 50);
-			// Int_t i=0;
-			// do
-			// {
-		 	// TH1::AddDirectory(kFALSE);
-
-			// // // // induced current
-			// TCanvas c4("Plots", "Plots", 1000, 1000);
-			// c4.cd();
-			// det.MipIR(100);
-			// TH1F *Icurrent = (TH1F *)det.sum->Clone();
-			// // Icurrent->Draw("HIST");
-			// Double_t charge_t;
-			// charge_t = Icurrent->Integral() * ((Icurrent->GetXaxis()->GetXmax() - Icurrent->GetXaxis()->GetXmin()) / Icurrent->GetNbinsX()) * 1e15;
-			// charge_total->Fill(charge_t);
-			// std::cout << "charge:" << charge_t << std::endl;
-
-			// // std::string output;
-			// // output = "out/sic_2021_4_26_ic_angle/sic_events_" + std::to_string(i) + ".C";
-			// // const char *out = output.c_str();
-			// // c4.SaveAs(out);
-
-			// c4.Update();
-			// // //current after electric
-			// TCanvas c5("Plots", "Plots", 1000, 1000);
-			// c5.cd();
-			// KElec tct;
-			// double CSA_thre_time = tct.CSAamp(det.sum, 0.4, 0.2, 75, 10, 0.66, 3);
-			// // // taurise=1ns taufall=1ns  detector capacitance=75 pF  CSATransImp=10
-			// // // CSA noise=0.66  CSA_threshold=3
-
-			// // std::cout << "CSA_thre_time:" << CSA_thre_time << std::endl;
-			// // if (CSA_thre_time!=0)
-			// // 	CSA_time_resolution->Fill(CSA_thre_time);
-			// // outfile<<CSA_thre_time<<std::endl;
-			// // //tct.preamp(det.sum);
-			// // // tct.CRshape(40e-12, 50, 10000, det.sum);
-			// // // tct.RCshape(40e-12, 50, 10000, det.sum);
-			// // // tct.RCshape(40e-12, 50, 10000, det.sum);
-			// // // tct.RCshape(40e-12, 50, 10000, det.sum);
-			// det.sum->Draw("HIST");
-
-			// std::string output_1;
-			// output_1 = "out/sic_2021_5_14_fenics_ec/sic_events_" + std::to_string(i)+".C";
-			// const char *out_1 = output_1.c_str();
-			// c5.SaveAs(out_1);
-			// std::cout<<output_1<<std::endl;
-			// i++;
-
-			// } while (i<5000);
-			
-			// ///////////////e-h pairs 
-			// TCanvas c6("Plots", "Plots", 1000, 1000);
-			// c6.cd();
-			// charge_total->Draw("HIST");
-			// c6.SaveAs("out_txt/eh_pairs_5_14.pdf");
-
-			// TCanvas c7("Plots", "Plots", 1000, 1000);
-			// c7.cd();
-			// CSA_time_resolution->Draw("HIST");
-			// c7.SaveAs("out_txt/time_resolution_2021_5_14.pdf");
-			// outfile.close();
-
-			// --------------------end---------------
+			c2.cd(6);
+			det.MipIR(1000);
+			det.pairs->Draw("HIST");
 
 		theApp.Run();
 		} // End "2D"

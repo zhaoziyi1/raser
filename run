@@ -50,8 +50,7 @@ case $option in
 	0.1.4) echo "get time resolution"
 		mkdir result/root -p
 		python3 python/add_noise_raser.py result/sic_${Time}_result/ result/root/sic_${Time}_result.root
-		;;
-esac
+		esac
 }
  
 

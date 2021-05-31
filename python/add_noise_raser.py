@@ -1,7 +1,7 @@
 '''
 author: tanyuhang
 time: 2021.3.8
-Use: Read the data of KDetsim induced current
+Use: Read the data of RASER induced current
 '''
 import os
 import sys

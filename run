@@ -10,15 +10,15 @@ usage() {
     printf "\nSYNOPSIS\n"
     printf "\n\t%-5s\n" "./run [OPTION]" 
     printf "\nOPTIONS\n"    
-    printf "\n\t%-9s  %-40s"  "0.1"       "KDetSim" 
+    printf "\n\t%-9s  %-40s"  "0.1"       "RASER" 
     printf "\n\n" 
 }
 
 usage_0_1() { 
-    printf "\n\t%-5s  %-40s\n"  "0.1.1"    "raser 2D SiC basic information" 
-    printf "\n\t%-5s  %-40s\n"  "0.1.2"    "raser 2D scan for time resolution" 
-	printf "\n\t%-5s  %-40s\n"  "0.1.2"    "data processing" 
-	printf "\n\t%-5s  %-40s\n"  "0.1.2"    "get time resolution" 
+    printf "\n\t%-5s  %-40s\n"  "0.1.1"    "RASER 2D SiC basic information" 
+    printf "\n\t%-5s  %-40s\n"  "0.1.2"    "RASER 2D scan for time resolution" 
+	printf "\n\t%-5s  %-40s\n"  "0.1.3"    "data processing" 
+	printf "\n\t%-5s  %-40s\n"  "0.1.4"    "get time resolution" 
 }
 
 if [[ $# -eq 0 ]]; then
@@ -28,8 +28,6 @@ if [[ $# -eq 0 ]]; then
 else
     option=$1    
 fi
-
-
 
 sub_0_1(){
 Time=2021_5_28
@@ -54,16 +52,14 @@ case $option in
 }
  
 
-
-
 case $option in 
-   0.1) echo "Raser"
+   0.1) echo "RASER"
         usage_0_1
         echo "Please enter your option: " 
         read option 
         sub_0_1 option 
         ;;
-    0.1.*) echo "Raser"
+    0.1.*) echo "RASER"
         sub_0_1 option
         ;;
         

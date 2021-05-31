@@ -589,18 +589,18 @@ def twoD_time_scan(output):
     my_track = Tracks()
     my_track.t_mip([50,0],[50,100],10)
     ROOT.gROOT.SetBatch(1)
+    for i in range (2000):
     ### drift of ionized particles
-    my_drift = Drifts(my_track)
-    my_drift.ionized_drift(my_track,my_field,my_detector)
-    ### after the electronics
-    my_electronics = Amplifier()
-    qtot,ele_current=my_electronics.CSA_amp(my_detector,t_rise=0.4,t_fall=0.2,trans_imp=10)
-    print("total_charge:%s fc"%(qtot*1e15))
-    c = ROOT.TCanvas("Plots", "Plots", 1000, 1000)
-    ele_current.Draw("HIST")
-    c.Update()
-    i=0
-    c.SaveAs(output+"t_"+str(i)+"_events.C")
+        my_drift = Drifts(my_track)
+        my_drift.ionized_drift(my_track,my_field,my_detector)
+        ### after the electronics
+        my_electronics = Amplifier()
+        qtot,ele_current=my_electronics.CSA_amp(my_detector,t_rise=0.4,t_fall=0.2,trans_imp=10)
+        print("total_charge:%s fc"%(qtot*1e15))
+        c = ROOT.TCanvas("Plots", "Plots", 1000, 1000)
+        ele_current.Draw("HIST")
+        c.Update()
+        c.SaveAs(output+"t_"+str(i)+"_events.C")
 
 def main():
     args = sys.argv[1:]

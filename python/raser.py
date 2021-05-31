@@ -3,6 +3,7 @@
 #  Based on Raser C++ https://github.com/dt-np/raser
 
 import matplotlib.pyplot as plt
+from array import array
 import fenics
 import numpy as np
 import math
@@ -104,6 +105,7 @@ class Fenics_cal:
                 else:
                     self.p_w_electric[i].append(self.w_electric_value[i+j*ny])
                     self.p_electric[i].append(self.electric_value[i+j*ny])
+
     def cal_field(self,my_d):
         nx = my_d.n_x
         ny = my_d.n_y
@@ -192,7 +194,6 @@ class Tracks:
             p_x = x_div_point
             p_y = y_div_point
             
-
 # mobility model
 def sic_mobility(charge,aver_e,my_detector):
     T=my_detector.temperature
@@ -217,7 +218,6 @@ def sic_mobility(charge,aver_e,my_detector):
         hfm = lfm / (math.pow(1.0 + math.pow(lfm * E / vsatp, betap), 1.0/betap))                      
     return hfm
     
-
 #The drift of generated particles
 class Drifts:
     def __init__(self,my_track):
@@ -294,8 +294,7 @@ class Drifts:
         else:
             self.d_cy = self.d_y+self.delta_y+self.dif_y
 
-    def drift_end_condition(self):
-        
+    def drift_end_condition(self):    
         if(self.wpot>(1-1e-5)):
             self.end_cond=1
         if(self.d_x<=0):
@@ -425,6 +424,41 @@ class Drifts:
                     self.n_step+=1
         Drifts.cal_current(self,my_d,my_t)
 
+    def draw_drift_path(self):
+        # ROOT.gStyle.SetOptStat(0)
+        c1 = ROOT.TCanvas("c1", "canvas1", 200,10,1000, 1000)
+        mg = ROOT.TMultiGraph("mg","")
+        x_array=array('f')
+        y_array=array('f')
+        for i in range(len(self.d_dic_p)):
+            n=len(self.d_dic_p["tk_"+str(i+1)][0])
+            if(n>0):
+                x_array.extend(self.d_dic_p["tk_"+str(i+1)][0])
+                y_array.extend(self.d_dic_p["tk_"+str(i+1)][1])             
+                gr_p = ROOT.TGraph(n,x_array,y_array)
+                gr_p.SetMarkerColor(4)
+                gr_p.SetLineColor(4)
+                gr_p.SetLineStyle(1)
+                mg.Add(gr_p)
+                del x_array[:]
+                del y_array[:]
+        for j in range(len(self.d_dic_n)):
+            m=len(self.d_dic_n["tk_"+str(j+1)][0])
+            if(m>0):
+                x_array.extend(self.d_dic_n["tk_"+str(j+1)][0])
+                y_array.extend(self.d_dic_n["tk_"+str(j+1)][1])             
+                gr_n = ROOT.TGraph(m,x_array,y_array)
+                gr_n.SetMarkerColor(2)
+                gr_n.SetLineColor(2)
+                gr_n.SetLineStyle(1)
+                mg.Add(gr_n)
+                del x_array[:]
+                del y_array[:]
+        mg.Draw("APL")
+        c1.SaveAs("drift_path.pdf")
+        i=0
+        while(i<100):
+            i=1	
 class Amplifier:
     def CSA_amp(self,my_d,t_rise,t_fall,trans_imp):
         hist = ROOT.TH1F()
@@ -463,7 +497,7 @@ class Amplifier:
             hist.SetBinContent(i,shaper_out_V[i])
         return qtot,hist
 
-def draw_plot(my_detector,ele_current,qtot):
+def draw_plot(my_detector,ele_current,qtot,my_drift):
 
     ROOT.gStyle.SetOptStat(0)
     c = ROOT.TCanvas("c", "canvas", 200,10,1000, 1000)
@@ -507,45 +541,42 @@ def draw_plot(my_detector,ele_current,qtot):
 
     c.Update()
     c.SaveAs("basic_infor.pdf")
-
+    
     charge_t=my_detector.sum_cu.Integral() \
         * ((my_detector.sum_cu.GetXaxis().GetXmax() \
         - my_detector.sum_cu.GetXaxis().GetXmin()) \
         / my_detector.sum_cu.GetNbinsX()) * 1e15
     print(charge_t)
     print(qtot*1e15)
+    my_drift.draw_drift_path()
     # question
     i=0
     while(i<100):
         i=1
+
 class Matplt:
     def plot_basic_info(self,my_f,my_drift):
         plt.figure(figsize=(20,20))
 
-        plt.subplot(3,2,1)
+        plt.subplot(2,2,1)
         plt.title('Electric field')
         plt.xlabel('depth [um]')
         plt.ylabel('Electric field [V/um]')
         plt.plot(my_f.y_f_position[0],my_f.ey_electric[0])
 
-        plt.subplot(3,2,2)
+        plt.subplot(2,2,2)
         plt.title('weighting potential')
         plt.xlabel('depth [um]')
         plt.ylabel('Electric potential [V]')
         plt.plot(my_f.y_position[0], my_f.p_w_electric[0])
 
-        plt.subplot(3,2,5)
+        plt.subplot(2,2,3)
         plt.title('potential')
         plt.xlabel('depth [um]')
         plt.ylabel('Electric potential [V]')
         plt.plot(my_f.y_position[0], my_f.p_electric[0])
-
-        plt.subplot(3,2,6)
-        plt.title('potential')
-        plt.xlabel('depth [um]')
-        plt.ylabel('Electric potential [V]')
-        plt.plot(my_drift.d_dic_p["tk_1"][3],my_drift.d_dic_p["tk_1"][4])
-        plt.show()
+        plt.savefig("test_electric.pdf")
+        # plt.show()
 ### get the 2D simulation basics information
 def twoD_time():
     ### define the structure of the detector
@@ -568,10 +599,10 @@ def twoD_time():
     my_electronics = Amplifier()
     qtot,ele_current=my_electronics.CSA_amp(my_detector,t_rise=0.4,t_fall=0.2,trans_imp=10)
     ### matlab plot and show
-    # my_plot = Matplt()
-    # my_plot.plot_basic_info(my_field,my_drift)
+    my_plot = Matplt()
+    my_plot.plot_basic_info(my_field,my_drift)
     ### root plot
-    draw_plot(my_detector,ele_current,qtot)
+    draw_plot(my_detector,ele_current,qtot,my_drift)
 
 ### get the 2D time resolution
 def twoD_time_scan(output):

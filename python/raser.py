@@ -3,7 +3,7 @@
 #  Based on Raser C++ https://github.com/dt-np/raser
 
 import matplotlib.pyplot as plt
-from fenics import *
+import fenics
 import numpy as np
 import math
 import random
@@ -46,43 +46,42 @@ class Fenics_cal:
         perm0 = 8.854187817e-12   #F/m
         self.f_value = -e0*my_d.d_neff*1e6/perm0/perm_sic
         self.tol = 1e-14
-        #fenics space
-        
-        mesh = RectangleMesh(Point(0, 0), Point(my_d.l_x, my_d.l_y), int(my_d.n_x), int(my_d.n_y))
-        self.V = FunctionSpace(mesh, 'P', 1)
+        #fenics space        
+        mesh = fenics.RectangleMesh(fenics.Point(0, 0), fenics.Point(my_d.l_x, my_d.l_y), int(my_d.n_x), int(my_d.n_y))
+        self.V = fenics.FunctionSpace(mesh, 'P', 1)
 
     def fenics_p_electric(self,my_d):    #get the electric potential
         # Define boundary condition
-        u_D = Expression('x[1] < tol? det_voltage : 0', degree=2,tol=1E-14,det_voltage=my_d.v_voltage)
+        u_D = fenics.Expression('x[1] < tol? det_voltage : 0', degree=2,tol=1E-14,det_voltage=my_d.v_voltage)
         def boundary(x, on_boundary):
             return abs(x[1])<self.tol or abs(x[1]-my_d.l_y)<self.tol
-        bc = DirichletBC(self.V, u_D, boundary)
+        bc = fenics.DirichletBC(self.V, u_D, boundary)
         # # Define variational problem
-        u = TrialFunction(self.V)
-        v = TestFunction(self.V)
-        f = Constant(self.f_value)
-        a = dot(grad(u), grad(v))*dx
-        L = f*v*dx
+        u = fenics.TrialFunction(self.V)
+        v = fenics.TestFunction(self.V)
+        f = fenics.Constant(self.f_value)
+        a = fenics.dot(fenics.grad(u), fenics.grad(v))*fenics.dx
+        L = f*v*fenics.dx
         # # Compute solution
-        u = Function(self.V)
-        solve(a == L, u, bc)
+        u = fenics.Function(self.V)
+        fenics.solve(a == L, u, bc)
         self.electric_value = u.compute_vertex_values()
 
     def fenics_p_w_electric(self,my_d):  #get the electric weighting potential
         #####Laplace's equation
-        u_w_D = Expression('x[1] < tol? 0 : 1', degree=2,tol=1E-14)
+        u_w_D = fenics.Expression('x[1] < tol? 0 : 1', degree=2,tol=1E-14)
         def boundary_w(x, on_boundary):
             return abs(x[1])<self.tol or abs(x[1]-my_d.l_y)<self.tol
-        bc_w = DirichletBC(self.V, u_w_D, boundary_w)
+        bc_w = fenics.DirichletBC(self.V, u_w_D, boundary_w)
         # # Define variational problem
-        u_w = TrialFunction(self.V)
-        v_w = TestFunction(self.V)
-        f_w = Constant(0)
-        a_w = dot(grad(u_w), grad(v_w))*dx
-        L_w = f_w*v_w*dx
+        u_w = fenics.TrialFunction(self.V)
+        v_w = fenics.TestFunction(self.V)
+        f_w = fenics.Constant(0)
+        a_w = fenics.dot(fenics.grad(u_w), fenics.grad(v_w))*fenics.dx
+        L_w = f_w*v_w*fenics.dx
         # # Compute solution
-        u_w = Function(self.V)
-        solve(a_w == L_w, u_w, bc_w)
+        u_w = fenics.Function(self.V)
+        fenics.solve(a_w == L_w, u_w, bc_w)
         self.w_electric_value = u_w.compute_vertex_values()
 
     def change_data_form(self,my_d):
@@ -551,7 +550,7 @@ class Matplt:
 def twoD_time():
     ### define the structure of the detector
     my_detector = R2dDetector(100,100)
-    my_detector.mesh_step(0.1)
+    my_detector.mesh_step(1)
     my_detector.set_para(doping=-10,voltage=-500,temperature=300)
     ### get the electric field and weighting potential
     my_field = Fenics_cal(my_detector)
@@ -578,7 +577,7 @@ def twoD_time():
 def twoD_time_scan(output):
     ### define the structure of the detector
     my_detector = R2dDetector(100,100)
-    my_detector.mesh_step(0.1)
+    my_detector.mesh_step(25)
     my_detector.set_para(doping=-10,voltage=-500,temperature=300)
     ### get the electric field and weighting potential
     my_field = Fenics_cal(my_detector)
@@ -588,29 +587,29 @@ def twoD_time_scan(output):
     my_field.cal_field(my_detector)  
     ### define the tracks and type of incident particles
     my_track = Tracks()
-    my_track.t_mip([50,0],[50,100],100)
-    # ROOT.gROOT.SetBatch(1)
-    for i in range(1000):
-        print("Events:%s"%i)
-        ### drift of ionized particles
-        my_drift = Drifts(my_track)
-        my_drift.ionized_drift(my_track,my_field,my_detector)
-        ### after the electronics
-        my_electronics = Amplifier()
-        qtot,ele_current=my_electronics.CSA_amp(my_detector,t_rise=0.4,t_fall=0.2,trans_imp=10)
-        print("total_charge:%s fc"%(qtot*1e15))
-        c = ROOT.TCanvas("Plots", "Plots", 1000, 1000)
-        ele_current.Draw("HIST")
-        c.Update()
-        c.SaveAs(output+"t_"+str(i)+"_events.C")
+    my_track.t_mip([50,0],[50,100],10)
+    ROOT.gROOT.SetBatch(1)
+    ### drift of ionized particles
+    my_drift = Drifts(my_track)
+    my_drift.ionized_drift(my_track,my_field,my_detector)
+    ### after the electronics
+    my_electronics = Amplifier()
+    qtot,ele_current=my_electronics.CSA_amp(my_detector,t_rise=0.4,t_fall=0.2,trans_imp=10)
+    print("total_charge:%s fc"%(qtot*1e15))
+    c = ROOT.TCanvas("Plots", "Plots", 1000, 1000)
+    ele_current.Draw("HIST")
+    c.Update()
+    i=0
+    c.SaveAs(output+"t_"+str(i)+"_events.C")
 
 def main():
     args = sys.argv[1:]
     model = args[0]
-    output = args[1]
+
     if model == "2D":
         twoD_time()
     if model == "2D_scan":
+        output = args[1]
         twoD_time_scan(output)
     
 if __name__ == '__main__':

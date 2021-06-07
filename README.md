@@ -11,4 +11,7 @@ RAdiation SEmiconductoR
 
 1.Docker
 
+
+# add fenics in dockerfile
+
 2.Xming

@@ -1,7 +1,3 @@
-#  Author: Yuhang Tan <tanyuhang@ihep.ac.cn> 
-#  Created [2021-05-18 Tues 14:11] 
-#  Based on Raser C++ https://github.com/dt-np/raser
-
 import matplotlib.pyplot as plt
 from array import array
 import fenics
@@ -13,13 +9,13 @@ import ROOT
 import time
 import sys
 import os
-factor = 1000.0 #um->mm
-#defien the detector parameter 
+FACTOR = 1000.0 #um->mm
+#define the detector parameter 
 class R3dDetector:
     def __init__(self,l_x,l_y,l_z):
-        self.l_x = l_x / factor #size
-        self.l_y = l_y / factor
-        self.l_z = l_z / factor
+        self.l_x = l_x / FACTOR #size
+        self.l_y = l_y / FACTOR
+        self.l_z = l_z / FACTOR
     def set_para(self,doping,voltage,temperature):
         self.d_neff = doping #dopingX1e12 cm^-3
         self.v_voltage = voltage #Voltage
@@ -30,8 +26,8 @@ class R3dDetector:
         self.negtive_cu = ROOT.TH1F("charge-","Negative Current",self.n_bin,0,self.t_end)
         self.sum_cu = ROOT.TH1F("charge","Total Current",self.n_bin,0,self.t_end)
     def set_electrode(self):
-        e_r = 15.0 / factor
-        e_int = 120.0 / factor
+        e_r = 15.0 / FACTOR
+        e_int = 120.0 / FACTOR
         e_t_y = R3dDetector.infor_ele(self,e_r,e_int)
         self.e_tr=[]
         self.e_t_1 = [self.l_x*0.5          ,self.l_y*0.5      ,e_r,0,self.l_z,"p"]
@@ -64,7 +60,7 @@ class Fenics_cal:
         perm_sic = 9.76  #Permittivity
         e0 = 1.60217733e-19
         perm0 = 8.854187817e-12   #F/m
-        self.f_value = -e0*my_d.d_neff*1e6/perm0/perm_sic*factor*factor
+        self.f_value = -e0*my_d.d_neff*1e6/perm0/perm_sic*FACTOR*FACTOR
         self.tol = 1e-14
         #fenics space        
         m_sensor =  mshr.Box(fenics.Point(0, 0, 0), fenics.Point(my_d.l_x, my_d.l_y, my_d.l_z))
@@ -193,9 +189,9 @@ class Drifts:
         self.muhh=1650.0   #mobility related with the magnetic field (now silicon useless)
         self.muhe=310.0
         self.BB=np.array([0,0,0])
-        self.sstep=0.1/factor #drift step
+        self.sstep=0.1/FACTOR #drift step
         self.kboltz=8.617385e-5 #eV/K
-        self.max_drift_len=1e9/factor #maximum diftlenght [um]
+        self.max_drift_len=1e9/FACTOR #maximum diftlenght [um]
         self.d_dic_n = {}
         self.d_dic_p = {}
         for n in range(len(my_track.p_tracks)):
@@ -226,7 +222,7 @@ class Drifts:
 
     def drift_v(self,my_d,my_f):
         e_delta_f = np.array(my_f.get_e_field(self.d_x+self.delta_x,self.d_y+self.delta_y,self.d_z+self.delta_z))
-        aver_e=(np.linalg.norm(self.e_field)+np.linalg.norm(e_delta_f))/2.0*1e4/factor  #V/cm
+        aver_e=(np.linalg.norm(self.e_field)+np.linalg.norm(e_delta_f))/2.0*1e4/FACTOR  #V/cm
         self.v_drift=sic_mobility(self.charg,aver_e,my_d)*aver_e  # mobility cm2/(V s) v : cm/s
         #drift part
         if(self.v_drift==0):
@@ -239,13 +235,13 @@ class Drifts:
             self.end_cond=9
         else:
             #off when the field gets large enough
-            DiffOffField=100.0*factor  # the silicon value ???              
+            DiffOffField=100.0*FACTOR  # the silicon value ???              
             if(np.linalg.norm(e_delta_f)<DiffOffField):
-                self.s_time=self.sstep*1e-4*factor/self.v_drift
+                self.s_time=self.sstep*1e-4*FACTOR/self.v_drift
                 s_sigma=math.sqrt(2.0*self.kboltz*sic_mobility(self.charg,aver_e,my_d)*my_d.temperature*self.s_time)
-                self.dif_x=random.gauss(0.0,s_sigma)*1e4/factor
-                self.dif_y=random.gauss(0.0,s_sigma)*1e4/factor
-                self.dif_z=random.gauss(0.0,s_sigma)*1e4/factor          
+                self.dif_x=random.gauss(0.0,s_sigma)*1e4/FACTOR
+                self.dif_y=random.gauss(0.0,s_sigma)*1e4/FACTOR
+                self.dif_z=random.gauss(0.0,s_sigma)*1e4/FACTOR          
             else:
                 self.dif_x=0.0
                 self.dif_y=0.0
@@ -350,7 +346,7 @@ class Drifts:
         hist = Myf.Get("Edep_device")
         gRandom = ROOT.TRandom3(0)
         ran_energy = hist.GetRandom(gRandom)
-        n_pairs = d_drift*ran_energy*1e6/(5*loss_energy)*factor
+        n_pairs = d_drift*ran_energy*1e6/(5*loss_energy)*FACTOR
         return n_pairs
 
     def get_laudau_dis(self,my_t):
@@ -358,7 +354,7 @@ class Drifts:
         d_x = math.pow(my_t.p_exit[0]-my_t.p_entry[0],2)
         d_y = math.pow(my_t.p_exit[1]-my_t.p_entry[1],2)
         d_z = math.pow(my_t.p_exit[2]-my_t.p_entry[2],2)
-        d_dis = math.sqrt(d_x+d_y+d_z)*factor
+        d_dis = math.sqrt(d_x+d_y+d_z)*FACTOR
         d_mpv = 0.04 * math.log(d_dis) + 0.27
         d_FWHM = 0.31 * math.pow(d_dis, -0.17)
         d_da = d_FWHM / 4.
@@ -383,7 +379,7 @@ class Drifts:
                 self.d_y=my_t.p_tracks[i][1]
                 self.d_z=my_t.p_tracks[i][2]
                 while (self.end_cond==0):
-                    if (self.d_y>=(my_d.l_y-1.0/factor) or self.d_x>=(my_d.l_x-1.0/factor) or self.d_z>=(my_d.l_z-1.0/factor)):
+                    if (self.d_y>=(my_d.l_y-1.0/FACTOR) or self.d_x>=(my_d.l_x-1.0/FACTOR) or self.d_z>=(my_d.l_z-1.0/FACTOR)):
                         self.end_cond=3  
                     else:                                       
                         # field of the position
@@ -399,7 +395,7 @@ class Drifts:
                         delta_Ew=my_f.get_w_p(self.d_cx,self.d_cy,self.d_cz)-my_f.get_w_p(self.d_x,self.d_y,self.d_cz)
                         self.charge=self.charg*delta_Ew
                         if(self.v_drift!=0):
-                            self.d_time=self.d_time+self.sstep*1e-4*factor/self.v_drift
+                            self.d_time=self.d_time+self.sstep*1e-4*FACTOR/self.v_drift
                             self.path_len+=self.sstep
                         self.d_x=self.d_cx
                         self.d_y=self.d_cy
@@ -660,7 +656,7 @@ def threeD_time():
     my_field.fenics_p_w_electric(my_detector)
     # ### define the tracks and type of incident particles
     my_track = Tracks()
-    my_track.t_mip([my_detector.e_t_4[0],my_detector.e_t_4[1],0.0/factor],[my_detector.e_t_6[0],my_detector.e_t_6[1],300.0/factor],300)
+    my_track.t_mip([my_detector.e_t_4[0],my_detector.e_t_4[1],0.0/FACTOR],[my_detector.e_t_6[0],my_detector.e_t_6[1],300.0/FACTOR],300)
     #my_track.t_mip([115,150,0],[115,150,300],300)
     # # ### drift of ionized particles
     my_drift = Drifts(my_track)

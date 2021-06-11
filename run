@@ -61,7 +61,7 @@ case $option in
 }
  
 sub_0_2(){
-Time=2021_6_8_3D
+Time=2021_6_11_3D_voltage_scan
 
 case $option in 
     0.2.1) echo "raser 3D SiC basic information..."
@@ -70,7 +70,7 @@ case $option in
     	;;
     0.2.2) echo "raser 3D scan for time resolution..."
 		mkdir out/fenics_${Time}/ -p
-		python3 python/raser_3D.py 3D_scan out/fenics_${Time}/ ${number} ${t_number} ${n_step}
+		python3 python/raser_3D.py 3D_scan out/fenics_${Time} ${number} ${t_number} ${n_step}
     	;;
 	0.2.3) echo "data processing"
 		mkdir result/sic_${Time}_result/ -p
@@ -84,6 +84,10 @@ case $option in
 	0.2.5) echo "Batch background operation"
 		# mkdir out/fenics_${Time}/ -p
 		python3 python/run_job.py 100 10000
+		;;
+	0.2.6) echo "Stop Batch background operation"
+		# mkdir out/fenics_${Time}/ -p
+		singularity instance stop --all
 		esac
 }
  

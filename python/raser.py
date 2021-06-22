@@ -24,11 +24,11 @@ class R2dDetector:
         self.d_neff = doping #dopingX1e12 cm^-3
         self.v_voltage = voltage #Voltage
         self.temperature = temperature #Voltage
-        self.n_bin = 5000
-        self.t_end = 10e-9
+        self.n_bin = 1000
+        self.t_end = 3e-9
         self.positive_cu = ROOT.TH1F("charge+","Positive Current",self.n_bin,0,self.t_end)
         self.negtive_cu = ROOT.TH1F("charge-","Negative Current",self.n_bin,0,self.t_end)
-        self.sum_cu = ROOT.TH1F("charge","Total Current",self.n_bin,0,self.t_end)
+        self.sum_cu = ROOT.TH1F("charge","Current",self.n_bin,0,self.t_end)
 #Calculate the weighting potential and electric field
 class Fenics_cal:
     #parameter of SiC
@@ -224,7 +224,7 @@ class Drifts:
         self.muhh=1650   #mobility related with the magnetic field (now silicon useless)
         self.muhe=310
         self.BB=np.array([0,0])
-        self.sstep=1 #drift step
+        self.sstep=0.1 #drift step
         self.kboltz=8.617385e-5 #eV/K
         self.max_drift_len=1e9 #maximum diftlenght [um]
         self.d_dic_n = {}
@@ -456,9 +456,9 @@ class Drifts:
                 del y_array[:]
         mg.Draw("APL")
         c1.SaveAs("drift_path.pdf")
-        i=0
-        while(i<100):
-            i=1	
+        # i=0
+        # while(i<100):
+        #     i=1	
 class Amplifier:
     def CSA_amp(self,my_d,t_rise,t_fall,trans_imp):
         hist = ROOT.TH1F()
@@ -502,8 +502,19 @@ def draw_plot(my_detector,ele_current,qtot,my_drift):
     ROOT.gStyle.SetOptStat(0)
     c = ROOT.TCanvas("c", "canvas", 200,10,1000, 1000)
     c.SetLeftMargin(0.12)
+    c.SetRightMargin(0.12)
     # c.SetTopMargin(0.12)
     c.SetBottomMargin(0.14)
+    my_detector.sum_cu.GetXaxis().SetTitleOffset(1.2)
+    my_detector.sum_cu.GetXaxis().SetTitleSize(0.05)
+    my_detector.sum_cu.GetXaxis().SetLabelSize(0.04)
+    my_detector.sum_cu.GetXaxis().SetNdivisions(510)
+    my_detector.sum_cu.GetYaxis().SetTitleOffset(1.1)
+    my_detector.sum_cu.GetYaxis().SetTitleSize(0.05)
+    my_detector.sum_cu.GetYaxis().SetLabelSize(0.04)
+    my_detector.sum_cu.GetYaxis().SetNdivisions(505)
+    my_detector.sum_cu.GetXaxis().CenterTitle()
+    my_detector.sum_cu.GetYaxis().CenterTitle()
     my_detector.sum_cu.GetXaxis().SetTitle("Time [s]")
     my_detector.sum_cu.GetYaxis().SetTitle("Current [A]")
     my_detector.sum_cu.Draw("HIST")
@@ -518,7 +529,10 @@ def draw_plot(my_detector,ele_current,qtot,my_drift):
     my_detector.positive_cu.SetLineColor(2)
     my_detector.negtive_cu.SetLineColor(4)
     ele_current.SetLineColor(6)
-    
+    my_detector.sum_cu.SetLineWidth(2)
+    my_detector.positive_cu.SetLineWidth(2)
+    my_detector.negtive_cu.SetLineWidth(2)
+    ele_current.SetLineWidth(2)    
     axis = ROOT.TGaxis(ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymin(), ROOT.gPad.GetUxmax(), ROOT.gPad.GetUymax(), rightmax, 0, 510, "+L")
     axis.SetLineColor(6)
     axis.SetTextColor(6)
@@ -529,14 +543,14 @@ def draw_plot(my_detector,ele_current,qtot,my_drift):
     axis.CenterTitle()
     axis.Draw("same")
 
-    legend = ROOT.TLegend(0.5, 0.3, 0.9, 0.6)
-    legend.AddEntry(my_detector.sum_cu, "sum", "l")
+    legend = ROOT.TLegend(0.5, 0.3, 0.8, 0.6)
     legend.AddEntry(my_detector.negtive_cu, "electron", "l")
     legend.AddEntry(my_detector.positive_cu, "hole", "l")
-    legend.AddEntry(ele_current, "current after electric", "l")
+    legend.AddEntry(my_detector.sum_cu, "e+h", "l")
+    legend.AddEntry(ele_current, "electronics", "l")
     legend.SetBorderSize(0)
     legend.SetTextFont(43)
-    legend.SetTextSize(30)
+    legend.SetTextSize(40)
     legend.Draw("same")
 
     c.Update()
@@ -550,9 +564,9 @@ def draw_plot(my_detector,ele_current,qtot,my_drift):
     print(qtot*1e15)
     my_drift.draw_drift_path()
     # question
-    i=0
-    while(i<100):
-        i=1
+    # i=0
+    # while(i<100):
+    #     i=1
 
 class Matplt:
     def plot_basic_info(self,my_f,my_drift):
@@ -605,7 +619,7 @@ def twoD_time():
     draw_plot(my_detector,ele_current,qtot,my_drift)
 
 ### get the 2D time resolution
-def twoD_time_scan(output):
+def twoD_time_scan(output,number):
     ### define the structure of the detector
     my_detector = R2dDetector(100,100)
     my_detector.mesh_step(25)
@@ -620,7 +634,7 @@ def twoD_time_scan(output):
     my_track = Tracks()
     my_track.t_mip([50,0],[50,100],10)
     ROOT.gROOT.SetBatch(1)
-    for i in range (2000):
+    for i in range (number,number+10):
     ### drift of ionized particles
         my_drift = Drifts(my_track)
         my_drift.ionized_drift(my_track,my_field,my_detector)
@@ -641,7 +655,8 @@ def main():
         twoD_time()
     if model == "2D_scan":
         output = args[1]
-        twoD_time_scan(output)
+        v_number = int(args[2])
+        twoD_time_scan(output,v_number)
     
 if __name__ == '__main__':
     #record run time

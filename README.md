@@ -2,7 +2,11 @@
 RAdiation SEmiconductoR 
 
 
+
+
 # Build with Singularity 
+
+Before running the code, install the Singularity on your OS. 
 
 > ./sinularity_build.sh  
 

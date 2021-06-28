@@ -1,17 +1,22 @@
 # raser
 RAdiation SEmiconductoR 
 
-1. docker_build.sh  (.bat for Window)
-2. docker_run.sh (.bat for Windows)
-3. make (compile raser binary)
-4. ./run  (run raser program)
+
+# Build with Singularity 
+
+> ./sinularity_build.sh  
+
+> ./singularity_run.sh 
+
+> raser> geant4_build.sh 
 
 
-# windows install software
 
-1.Docker
+# Run with Singularity 
 
+> ./singularity_run.sh 
 
-# add fenics in dockerfile
+> raser> geant4_setup.sh 
 
-2.Xming
+> raser> ./run 
+

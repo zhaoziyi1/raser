@@ -1,4 +1,4 @@
-# raser
+# RASER 
 RAdiation SEmiconductoR 
 
 

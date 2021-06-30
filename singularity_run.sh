@@ -7,6 +7,6 @@
 
 echo "Singularity run raser ..."
 #singularity shell --bind /raser -e raser.simg
-singularity shell -e raser.simg
+singularity shell raser.simg
 
 

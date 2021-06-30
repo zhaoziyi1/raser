@@ -1,4 +1,4 @@
-# raser
+# RASER 
 RAdiation SEmiconductoR 
 
 
@@ -20,7 +20,7 @@ Before running the code, install the Singularity on your OS.
 
 > ./singularity_run.sh 
 
-> raser> geant4_setup.sh 
+> raser> source geant4_setup.sh 
 
 > raser> ./run 
 

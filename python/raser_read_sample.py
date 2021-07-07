@@ -1,15 +1,18 @@
 '''
 author: tanyuhang
 time: 2021.3.8
-Use: Read the data of RASER induced current
+Use: Read the data of KDetsim induced current
 '''
 import os
 import sys
 import re
 from ROOT import TCanvas,TGraph,TMultiGraph,TLegend
+# from tools import set_root_style
 from array import array
 import ROOT
 from ROOT import gStyle
+
+time_delay=0  #20ns
 def main(): 
     args = sys.argv[1:]
     input_file=args[0]
@@ -31,7 +34,7 @@ def main():
             #data_name="x"+str(i)+"_y"+str(j)+".C"
             path = os.path.join(input_file, file) 
             if ".C" in path:
-                if i <4000:
+                if i <100000:
                     i+=1
                     with open(path) as file_obj:
                         out_name=out_p+file
@@ -46,10 +49,19 @@ def main():
                         current_list=[]
                         time_list,current_list=save_txt(pattern,out_path,k,model)
                     write_end_to_txt(out_path,time_list)
+                    # gr=save_graph(time_list,current_list)
+                #gr=set_color_marker(color,marker,c_number,gr)              
+                #leg=fill_legend(leg,gr,out_path)   
+                    # c_number=c_number+1  
+                    # mg.Add(gr)
+    print("event number: %s"%i)
+    #draw the waveform together
+    
+    # draw_mg(mg,leg,out_p,model)
 
 def save_txt(pattern,name,k,model):
     #change .C file to txt file and multiply a factor
-    time_factor=2.5e-12
+    time_factor=3e-12
     e_0 = 1.60217733e-19
     #current_factor=1e-6
     k=k-1
@@ -59,6 +71,8 @@ def save_txt(pattern,name,k,model):
     time=0.0
     current=0.0
     for j in range (0,len(pattern)):
+        #time=float(pattern[j].split(',')[0])*time_factor+k*time_delay
+        #current=float(pattern[j].split(',')[1])/time_factor*100*50*1000*1e-15 
         time=float(pattern[j].split(',')[0])*time_factor
         if model == "I":
             current=float(pattern[j].split(',')[1])*1e6
@@ -76,7 +90,7 @@ def start_write_to_txt(out_path):
     f.close()
 def write_zero_to_txt(out_path,k):
     f = open(out_path,"a")
-    time=0
+    time=k*time_delay
     f.write(str(time)+",0.0\n")
     f.close()
 def write_end_to_txt(out_path,time_list):
@@ -131,6 +145,15 @@ def set_color_marker(color,marker,i,gr):
     return gr
 
 def fill_legend(leg,gr,name):
+    # leg name define
+    #leg_name="position:x"+str(x_number)+"_y"+str(y_number)
+    # print c_number
+    # if c_number == 0:
+    #     leg_name="first_point"
+    # if c_number == 1:
+    #     leg_name="second_point"
+    # if c_number == 2:
+    #     leg_name="third_point"
     leg.AddEntry(gr,name,"LP")
     return leg
 

@@ -27,7 +27,6 @@ and boundary conditions given by
 
 
 import fenics
-import matplotlib.pyplot as plt
 import numpy as np
 import math
 import random
@@ -822,28 +821,28 @@ def draw_plot(det,ele_current,qtot,drift):
     print(qtot*1e15)
     drift.draw_drift_path()
 
-class Matplt:
-    def plot_basic_info(self,fen,drift):
-        plt.figure(figsize=(20,20))
-
-        plt.subplot(2,2,1)
-        plt.title('Electric field')
-        plt.xlabel('depth [um]')
-        plt.ylabel('Electric field [V/um]')
-        plt.plot(fen.y_f_position[0],fen.electric_field_y_value[0])
-
-        plt.subplot(2,2,2)
-        plt.title('weighting potential')
-        plt.xlabel('depth [um]')
-        plt.ylabel('Electric potential [V]')
-        plt.plot(fen.y_position[0], fen.p_w_electric[0])
-
-        plt.subplot(2,2,3)
-        plt.title('potential')
-        plt.xlabel('depth [um]')
-        plt.ylabel('Electric potential [V]')
-        plt.plot(fen.y_position[0], fen.p_electric[0])
-        plt.savefig("test_electric.pdf")
+# class Matplt:
+#     def plot_basic_info(self,fen,drift):
+#         plt.figure(figsize=(20,20))
+# 
+#         plt.subplot(2,2,1)
+#         plt.title('Electric field')
+#         plt.xlabel('depth [um]')
+#         plt.ylabel('Electric field [V/um]')
+#         plt.plot(fen.y_f_position[0],fen.electric_field_y_value[0])
+# 
+#         plt.subplot(2,2,2)
+#         plt.title('weighting potential')
+#         plt.xlabel('depth [um]')
+#         plt.ylabel('Electric potential [V]')
+#         plt.plot(fen.y_position[0], fen.p_w_electric[0])
+# 
+#         plt.subplot(2,2,3)
+#         plt.title('potential')
+#         plt.xlabel('depth [um]')
+#         plt.ylabel('Electric potential [V]')
+#         plt.plot(fen.y_position[0], fen.p_electric[0])
+#         plt.savefig("test_electric.pdf")
     
 if __name__ == '__main__':
 

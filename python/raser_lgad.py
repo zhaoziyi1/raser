@@ -34,7 +34,6 @@ import time
 import sys
 import ROOT
 from array import array
-import matplotlib.pyplot as plt
 
 """ Global Constant """
 E0 = 1.60217733e-19 # C

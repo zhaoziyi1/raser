@@ -35,7 +35,6 @@ import sys
 import ROOT
 from array import array
 
-
 """ Global Constant """
 E0 = 1.60217733e-19 # C
 PERM0 = 8.854187817e-12 #F/m
@@ -70,6 +69,71 @@ class Material:
         return self.mat_db_dict[self.mat_name]
 
 
+""" Define Mobility """
+
+class Mobility:
+    def __init__(self,model_name):
+        self.model_name = model_name
+
+    def cal_mobility(self, det, position, charge, electric_field):
+
+        x = position[0]
+        y = position[1]
+        T = det.temperature
+        E = electric_field
+
+        doping_expr = det.doping_epr
+        doping_expr = doping_expr.replace("x[1]","y")
+        doping_expr = doping_expr.replace("sqrt","math.sqrt")
+        doping_expr = doping_expr.replace("exp","math.exp")
+        #print(doping_expr)
+        Neff = eval(doping_expr)
+
+        # SiC mobility
+        if(self.model_name == 'SiC'):
+            if(charge>0):
+                alpha = 0.34
+                ulp = 124 * math.pow(T / 300, -2)
+                uminp = 15.9
+                Crefp = 1.76e19
+                betap = 1.213 * math.pow(T / 300.0, 0.17)
+                vsatp = 2e7 * math.pow(T / 300.0, 0.52)
+                lfm = uminp + ulp/(1.0 + math.pow(Neff*1e12 / Crefp, alpha))
+                hfm = lfm / (math.pow(1.0 + math.pow(lfm * E / vsatp, betap), 1.0 / betap))  
+
+            if(charge<0):
+                alpha = 0.61
+                ulp = 947 * math.pow(T / 300, -2)
+                Crefp = 1.94e19
+                betap = 1 * math.pow(T / 300, 0.66)
+                vsatp = 2e7 * math.pow(T / 300, 0.87)
+                lfm = ulp/ (1 + math.pow(Neff*1e12 / Crefp, alpha))
+                hfm = lfm / (math.pow(1.0 + math.pow(lfm * E / vsatp, betap), 1.0/betap))
+
+        # Si mobility
+        if(self.model_name == 'Si'):
+            alpha = 0.72*math.pow(T/300.0,0.065)
+            if(charge>0):
+                ulp = 460.0 * math.pow(T / 300.0, -2.18)
+                uminp = 45.0*math.pow(T / 300.0, -0.45)
+                Crefp = 2.23e17*math.pow(T / 300.0, 3.2)
+                betap = 1.0
+                vsatp = 9.05e6 * math.sqrt(math.tanh(312.0/T))
+                lfm = uminp + (ulp-uminp)/(1.0 + math.pow(Neff*1e12 / Crefp, alpha))
+                hfm = 2*lfm / (1.0+math.pow(1.0 + math.pow(2*lfm * E / vsatp, betap), 1.0 / betap))                        
+            else:
+                uln = 1430.0 * math.pow(T / 300.0, -2.0)
+                uminn = 80.0*math.pow(T / 300.0, -0.45)
+                Crefn = 1.12e17*math.pow(T/300.0,3.2)
+                betan = 2
+                vsatn = 1.45e7 * math.sqrt(math.tanh(155.0/T))
+                lfm = uminn + (uln-uminn)/ (1.0 + math.pow(Neff*1e12 / Crefn, alpha))
+                hfm = 2*lfm / (1.0+math.pow(1.0 + math.pow(2*lfm * E / vsatn, betan), 1.0/betan))
+
+        return hfm
+
+
+
 
 """ Define Detector Geometry """
 
@@ -86,11 +150,16 @@ class R2dDetector:
         self.sum_cu = ROOT.TH1F("charge","Current",self.n_bin,0,self.t_end)
     
     def mesh(self,x_step,y_step):
+
+        self.x_step = x_step
+        self.y_step = y_step
+
         self.nx = int(self.det_width/x_step)
         self.ny = int(self.det_thin/y_step)
 
     def set_mat(self,mat):
         self.mat =mat
+        self.mat_name = mat.mat_name
         self.par_dict = self.mat.mat_database()
 
     def set_doping(self,doping_epr):
@@ -100,7 +169,7 @@ class R2dDetector:
         self.bias_voltage = bias_voltage
 
     def set_temperature(self,temperature):
-        self.set_temperature = temperature
+        self.temperature = temperature
 
 
 
@@ -257,49 +326,58 @@ class FenicsPossion:
 
     def cal_point_field(self,px_point,py_point,input_value):
 
-        #Interpolation method 
-        rex_value=px_point%self.lx_step
-        nx_value=int(px_point/self.lx_step)
-        rey_value=py_point%self.ly_step
-        ny_value=int(py_point/self.ly_step)
+        width = self.det.det_width
+        thin = self.det.det_thin
+        
+        nx = self.det.nx
+        ny = self.det.ny
 
-        if(rex_value>self.lx_step/2):
-            e_v_x1=rex_value-self.lx_step/2
+        x_step = width/nx
+        y_step = thin/ny
+
+        #Interpolation method 
+        rex_value=px_point%x_step
+        nx_value=int(px_point/x_step)
+        rey_value=py_point%y_step
+        ny_value=int(py_point/y_step)
+
+        if(rex_value>x_step/2):
+            e_v_x1=rex_value-x_step/2
             nx1_v=nx_value
             nx2_v=nx_value+1
         else:
-            e_v_x1=rex_value+self.lx_step/2
-            e_v_x2=self.lx_step-e_v_x1
+            e_v_x1=rex_value+x_step/2
+            e_v_x2=x_step-e_v_x1
             nx1_v=nx_value-1
             nx2_v=nx_value
 
-        if(rey_value>self.ly_step/2):
-            e_v_y1=rey_value-self.ly_step/2
+        if(rey_value>y_step/2):
+            e_v_y1=rey_value-y_step/2
             ny1_v=ny_value
             ny2_v=ny_value+1
         else:
-            e_v_y1=rey_value+self.ly_step/2
-            e_v_y2=self.ly_step-e_v_y1
+            e_v_y1=rey_value+y_step/2
+            e_v_y2=y_step-e_v_y1
             ny1_v=ny_value-1
             ny2_v=ny_value
 
         if (nx_value<=0):
             r_u=0
             nx1_v=nx2_v
-        elif (nx_value>=self.n_x-1):
+        elif (nx_value>=nx-1):
             r_u=0
             nx2_v=nx1_v
         else:
-            r_u=e_v_x1/self.lx_step
+            r_u=e_v_x1/x_step
 
         if (ny_value<=0):
             r_t=0
             ny1_v=ny2_v
-        elif (ny_value>=self.n_y-1):
+        elif (ny_value>=ny-1):
             r_t=0
             ny2_v=ny1_v
         else:
-            r_t=e_v_y1/self.ly_step
+            r_t=e_v_y1/y_step
 
         value_11=input_value[nx1_v][ny1_v]
         value_21=input_value[nx2_v][ny1_v]
@@ -332,8 +410,8 @@ class FenicsPossion:
             ep.append(self.electric_field_y_position[i][cutline])
             ev.append(self.electric_field_y_value[i][cutline])
 
-        print(ep)
-        print(ev)
+        #print(ep)
+        #print(ev)
 
         g_e = ROOT.TGraph(self.det.ny,ep,ev)
 
@@ -371,7 +449,7 @@ class FenicsPossion:
         g_e.Draw()
         c.Modified()
         c.Update()
-        c.SaveAs("lgad_electricfield.pdf")
+        c.SaveAs("electricfield.pdf")
 
 
         # plt.figure(figsize=(8,4), dpi=80)
@@ -411,46 +489,6 @@ class Tracks:
             self.d_tracks.append(math.sqrt(math.pow(x_div_point-p_x,2)+math.pow(y_div_point-p_y,2)))
             p_x = x_div_point
             p_y = y_div_point
-
-
-
-""" Define Mobility """
-
-class Mobility:
-    def __init__(self,model_name):
-        self.model_name = model_name
-
-    def cal_mobility(self, det, position, charge, electric_field):
-
-        x = position[0]
-        y = position[1]
-        T = det.temperature
-        E = electric_field
-
-        doping_expr = det.doping_epr
-        doping_expr = doping_expr.replace("x[1]","y")
-        Neff = eval(doping_expr)
-
-        if(charge>0):
-            alpha = 0.34
-            ulp = 124 * math.pow(T / 300, -2)
-            uminp = 15.9
-            Crefp = 1.76e19
-            betap = 1.213 * math.pow(T / 300.0, 0.17)
-            vsatp = 2e7 * math.pow(T / 300.0, 0.52)
-            lfm = uminp + ulp/(1.0 + math.pow(Neff*1e12 / Crefp, alpha))
-            hfm = lfm / (math.pow(1.0 + math.pow(lfm * E / vsatp, betap), 1.0 / betap))  
-
-        if(charge<0):
-            alpha = 0.61
-            ulp = 947 * math.pow(T / 300, -2)
-            Crefp = 1.94e19
-            betap = 1 * math.pow(T / 300, 0.66)
-            vsatp = 2e7 * math.pow(T / 300, 0.87)
-            lfm = ulp/ (1 + math.pow(Neff*1e12 / Crefp, alpha))
-            hfm = lfm / (math.pow(1.0 + math.pow(lfm * E / vsatp, betap), 1.0/betap))
-
-        return hfm
 
 
 
@@ -495,7 +533,7 @@ class Drifts:
 
     def drift_v(self,det,fen):
 
-        sic_mobility = Mobility('SiC')
+        my_mobility = Mobility(det.mat_name)
 
         ex_delta_f = fen.cal_point_field(self.d_x+self.delta_x,self.d_y+self.delta_y,fen.electric_field_x_value)
         ey_delta_f = fen.cal_point_field(self.d_x+self.delta_x,self.d_y+self.delta_y,fen.electric_field_y_value)
@@ -506,7 +544,7 @@ class Drifts:
 
         aver_e=(np.linalg.norm(self.e_field)+np.linalg.norm(e_delta_f))/2*1e4
 
-        self.v_drift=sic_mobility.cal_mobility(det, pos, self.charg, aver_e)*aver_e
+        self.v_drift=my_mobility.cal_mobility(det, pos, self.charg, aver_e)*aver_e
 
         #drift part
         if(self.v_drift==0):
@@ -520,7 +558,7 @@ class Drifts:
             DiffOffField=8  # the silicon value?              
             if(np.linalg.norm(e_delta_f)<DiffOffField):
                 self.s_time=self.sstep*1e-4/self.v_drift
-                s_sigma=math.sqrt(2*self.kboltz*sic_mobility(self.charg,aver_e,det)*det.temperature*self.s_time)
+                s_sigma=math.sqrt(2*self.kboltz*my_mobility.cal_mobility(det, pos, self.charg, aver_e)*det.temperature*self.s_time)
                 self.dif_x=random.gauss(0,s_sigma)*1e4
                 self.dif_y=random.gauss(0,s_sigma)*1e4          
             else:
@@ -529,15 +567,15 @@ class Drifts:
 
     def drift_s_step(self,det):
         # x axis   
-        if((self.d_x+self.delta_x+self.dif_x)>=det.width): 
-            self.d_cx = det.width
+        if((self.d_x+self.delta_x+self.dif_x)>=det.det_width): 
+            self.d_cx = det.det_width
         elif((self.d_x+self.delta_x+self.dif_x)<0):
             self.d_cx = 0
         else:
             self.d_cx = self.d_x+self.delta_x+self.dif_x
         # y axis
-        if((self.d_y+self.delta_y+self.dif_y)>=det.thin): 
-            self.d_cy = det.thin
+        if((self.d_y+self.delta_y+self.dif_y)>=det.det_thin): 
+            self.d_cy = det.det_thin
         elif((self.d_y+self.delta_y+self.dif_y)<0):
             self.d_cy = 0
         else:
@@ -665,14 +703,14 @@ class Drifts:
                         #drift_next_posiiton
                         Drifts.drift_s_step(self,det)
                         #charge_collection
-                        delta_Ew=fen.cal_point_field(self.d_cx,self.d_cy,fen.p_w_electric)-fen.cal_point_field(self.d_x,self.d_y,fen.p_w_electric)
+                        delta_Ew=fen.cal_point_field(self.d_cx,self.d_cy,fen.weighting_potential_value_2d)-fen.cal_point_field(self.d_x,self.d_y,fen.weighting_potential_value_2d)
                         self.charge=self.charg*delta_Ew
                         if(self.v_drift!=0):
                             self.d_time=self.d_time+self.s_time
                             self.path_len+=self.sstep
                         self.d_x=self.d_cx
                         self.d_y=self.d_cy
-                        self.wpot=fen.cal_point_field(self.d_x,self.d_y,fen.p_w_electric)
+                        self.wpot=fen.cal_point_field(self.d_x,self.d_y,fen.weighting_potential_value_2d)
                         Drifts.save_inf_track(self)  
                         Drifts.drift_end_condition(self)                                                                         
                     self.n_step+=1
@@ -754,7 +792,7 @@ class Amplifier:
             hist.SetBinContent(i,shaper_out_V[i])
         return qtot,hist
 
-def draw_plot(det,ele_current,qtot,drift):
+def draw_current(det,ele_current,qtot,drift):
 
     ROOT.gStyle.SetOptStat(0)
     c = ROOT.TCanvas("c", "canvas", 200,10,1000, 1000)
@@ -811,7 +849,7 @@ def draw_plot(det,ele_current,qtot,drift):
     legend.Draw("same")
 
     c.Update()
-    c.SaveAs("basic_infor.pdf")
+    c.SaveAs("drift_current.pdf")
     
     charge_t=det.sum_cu.Integral() \
         * ((det.sum_cu.GetXaxis().GetXmax() \
@@ -821,166 +859,54 @@ def draw_plot(det,ele_current,qtot,drift):
     print(qtot*1e15)
     drift.draw_drift_path()
 
-# class Matplt:
-#     def plot_basic_info(self,fen,drift):
-#         plt.figure(figsize=(20,20))
-# 
-#         plt.subplot(2,2,1)
-#         plt.title('Electric field')
-#         plt.xlabel('depth [um]')
-#         plt.ylabel('Electric field [V/um]')
-#         plt.plot(fen.y_f_position[0],fen.electric_field_y_value[0])
-# 
-#         plt.subplot(2,2,2)
-#         plt.title('weighting potential')
-#         plt.xlabel('depth [um]')
-#         plt.ylabel('Electric potential [V]')
-#         plt.plot(fen.y_position[0], fen.p_w_electric[0])
-# 
-#         plt.subplot(2,2,3)
-#         plt.title('potential')
-#         plt.xlabel('depth [um]')
-#         plt.ylabel('Electric potential [V]')
-#         plt.plot(fen.y_position[0], fen.p_electric[0])
-#         plt.savefig("test_electric.pdf")
-    
-if __name__ == '__main__':
 
-    my_lgad = R2dDetector(50,50)
+def main():
+    args = sys.argv[1:]
+    model = args[0]
 
+    # define geometry
+    my_lgad = R2dDetector(50,100) # [um]
+
+    # set material
     my_sic_mat = Material('SiC')
     my_lgad.set_mat(my_sic_mat)
 
-    my_lgad.set_doping("(6.1942*(1e14)/sqrt(2*3.1415926)/0.13821*exp(-pow(x[1]-0.67,2))/2/0.13821/0.13821 + (1e13))*((1.60217733e-19)*(1e6)/(8.854187817e-12)/(9.76))*1e-12")
+    # set doping
+    if model == "LGAD":
+        my_lgad.set_doping("(6.1942*(1e14)/sqrt(2*3.1415926)/0.13821*exp(-pow(x[1]-0.67,2))/2/0.13821/0.13821 + (1e13))*((1.60217733e-19)*(1e6)/(8.854187817e-12)/(9.76))*1e-12") # [cm-3]
+    if model == "PIN":
+        my_lgad.set_doping("((1e13))*((1.60217733e-19)*(1e6)/(8.854187817e-12)/(9.76))*1e-12") # [cm-3]
 
-    my_lgad.set_bias_voltage(-200)
+    # set operating condition
+    my_lgad.set_temperature(300) # [K]
+    my_lgad.set_bias_voltage(-200) # [V]
 
-    my_lgad.mesh(0.1, 0.1)
+    # mesh
+    my_lgad.mesh(0.1, 0.1) # [um]
 
+    # calculate electric field
     my_possion_solver = FenicsPossion(my_lgad)
     my_possion_solver.solve()
     my_possion_solver.draw()
 
-    #my_track = Tracks()
-    #my_track.mips([25,0],[25,50],500)
+    my_track = Tracks()
+    my_track.mips([25,0],[25,50],500)
 
-    #drift = Drifts(my_track)
-    #drift.ionized_drift(my_track,my_possion_solver,my_lgad)
+    drift = Drifts(my_track)
+    drift.ionized_drift(my_track,my_possion_solver,my_lgad)
     ### after the electronics
-    #my_electronics = Amplifier()
-    #qtot,ele_current=my_electronics.CSA_amp(my_lgad,t_rise=0.4,t_fall=0.2,trans_imp=10)
-    ### matlab plot and show
-    #my_plot = Matplt()
-    #my_plot.plot_basic_info(my_possion_solver,drift)
-    ### root plot
-    #draw_plot(my_lgad,ele_current,qtot,drift)
+    my_electronics = Amplifier()
+    qtot,ele_current=my_electronics.CSA_amp(my_lgad,t_rise=0.4,t_fall=0.2,trans_imp=10)
+    draw_current(my_lgad,ele_current,qtot,drift)
 
 
 
-# perm_sic = 9.76  #Permittivity
-# e0 = 1.60217733e-19
-# perm0 = 8.854187817e-12   #F/m
-# 
-# width = 50.0 # um X-axis
-# thin = 50.0 # um Y-axis
-# nx = 500
-# ny = 500
-# 
-# bias_voltage = -200 # V
-# 
-# # Create mesh and function space
-# 
-# mesh = fenics.RectangleMesh(fenics.Point(0, 0), fenics.Point(width, thin), nx, ny)
-# V = fenics.FunctionSpace(mesh, "P", 1)
-# 
-# # Define variational problem
-# u = fenics.TrialFunction(V)
-# v = fenics.TestFunction(V)
-# 
-# # LGAD
-# # f = Expression("(6.1942*(1e14)/sqrt(2*3.1415926)/0.13821*exp(-pow(x[1]-0.67,2))/2/0.13821/0.13821 + # (1e13))*((1.60217733e-19)*(1e6)/(8.854187817e-12)/(9.76))*1e-12", degree=2)
-# 
-# # PIN
-# value = e0*10*1e6/perm0/perm_sic
-# f= fenics.Constant(value)
-# 
-# a = fenics.dot(fenics.grad(u), fenics.grad(v))*dx
-# L = f*v*fenics.dx #+ g*v*ds
-# 
-# 
-# # Define boundary condition
-# u_D = fenics.Expression('x[1] < tol? det_voltage : 0', degree=2,tol=1E-14,det_voltage=bias_voltage)
-# 
-# def boundary(x, on_boundary):
-#     return abs(x[1])<1E-14 or abs(x[1]-thin)<1E-14
-# 
-# bc = fenics.DirichletBC(V, u_D, boundary)
-# 
-# # Compute solution
-# u = fenics.Function(V)
-# fenics.solve(a == L, u, bc)
-# 
-# # Save solution to file
-# #file = File("poisson.pvd")
-# #file << u
-# 
-# # Calculate electric field
-# potential_value_1d = u.compute_vertex_values()
-# potential_value_2d = np.array(potential_value_1d).reshape(nx+1,ny+1)
-# # print(potential_value_2d)
-# 
-# 
-# potential_value = []
-# potential_position = []
-# 
-# for i in range(ny+1):
-#     potential_value.append(potential_value_2d[i][250])
-#     potential_position.append(i*thin/ny)
-# 
-# 
-# electric_field_value = []
-# electric_field_position = []
-# 
-# for i in (range(ny)):
-#     tmp_e = (potential_value_2d[i][250]-potential_value_2d[i+1][250])/(50.0/ny)
-#     electric_field_value.append(tmp_e)
-#     electric_field_position.append(thin/ny*(i+1))
-# 
-# #print(len(electric_field_value))
-# 
-# 
-# 
-# # Plot solution
-# depth = np.linspace(0, 50, 500)
-# doping = (6.1942*(1e14)/sqrt(2*3.1415926)/0.13821*np.exp(-pow(depth-0.67,2))/2/0.13821/0.13821 + (1e13))
-# 
-# #plot(u)
-# # plt.figure(figsize=(4,4), dpi=80)
-# # plt.plot(depth,doping)
-# # plt.yscale('symlog')
-# # plt.xlabel('depth [um]')
-# # plt.ylabel('doping [cm-3]')
-# 
-# plt.figure(figsize=(12,4), dpi=80)
-# plt.figure(1)
-# 
-# ax1 = plt.subplot(131)
-# ax1.invert_yaxis()
-# plt.xlabel('width [um]')
-# plt.ylabel('depth [um]')
-# plot(u)
-# 
-# ax2 = plt.subplot(132)
-# plt.plot(potential_position,potential_value)
-# plt.xlabel('depth [um]')
-# plt.ylabel('potential [V]')
-# 
-# ax2 = plt.subplot(133)
-# plt.plot(electric_field_position,electric_field_value)
-# plt.xlabel('depth [um]')
-# plt.ylabel('electric field [V/um]')
-# 
-# 
-# plt.tight_layout()
-# 
-# plt.show()
+if __name__ == '__main__':
+
+    #record run time
+    starttime = time.time()
+    main() 
+    endtime=time.time()
+    dtime = endtime-starttime
+    print ("the process run time %.8s s" %dtime) 
+

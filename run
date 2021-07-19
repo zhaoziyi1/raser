@@ -31,7 +31,8 @@ usage_0_2() {
 	printf "\n\t%-5s  %-40s\n"  "0.2.6"    "Stop Batch background operation" 
 }
 usage_0_3() { 
-    printf "\n\t%-5s  %-40s\n"  "0.3.1"    "RASER 2D LGAD Electrical Field" 
+    printf "\n\t%-5s  %-40s\n"  "0.3.1"    "RASER 2D LGAD" 
+	printf "\n\t%-5s  %-40s\n"  "0.3.2"    "RASER 2D PIN"
 }
 if [[ $# -eq 0 ]]; then
     usage
@@ -102,8 +103,11 @@ sub_0_3(){
 Time=2021_5_28
 case $option in 
     0.3.1) echo "raser 2D lgad electric field..."
-		python3 python/raser_lgad.py
+		python3 python/raser_lgad.py LGAD
     	;;
+	0.3.2) echo "raser 2D pin electric field..."
+	python3 python/raser_lgad.py PIN
+    ;;
 		esac
 }
 

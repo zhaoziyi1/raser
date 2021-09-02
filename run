@@ -33,6 +33,7 @@ usage_0_2() {
 usage_0_3() { 
     printf "\n\t%-5s  %-40s\n"  "0.3.1"    "RASER 2D LGAD" 
 	printf "\n\t%-5s  %-40s\n"  "0.3.2"    "RASER 2D PIN"
+	printf "\n\t%-5s  %-40s\n"  "0.3.3"    "RASER 2D LGAD p_type"
 }
 if [[ $# -eq 0 ]]; then
     usage
@@ -106,8 +107,11 @@ case $option in
 		python3 python/raser_lgad.py LGAD
     	;;
 	0.3.2) echo "raser 2D pin electric field..."
-	python3 python/raser_lgad.py PIN
-    ;;
+		python3 python/raser_lgad.py PIN
+    	;;
+	0.3.3) echo "raser 2D P_type lgad electric field map"
+		python3 python/raser_lgad.py LGAD_P_type
+		;;
 		esac
 }
 
@@ -133,12 +137,12 @@ case $option in
     0.2.*) echo "RASER 3D"
         sub_0_2 option 
 		;;
-   0.3) echo "RASER LGAD"
+   0.3) echo "RASER 2D"
         usage_0_3
         echo "Please enter your option: " 
         read option 
         sub_0_3 option 
         ;;
-    0.3.*) echo "RASER 3D"
+    0.3.*) echo "RASER 2D"
         sub_0_3 option 
 		esac

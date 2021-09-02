@@ -87,7 +87,7 @@ class Mobility:
         doping_expr = doping_expr.replace("sqrt","math.sqrt")
         doping_expr = doping_expr.replace("exp","math.exp")
         #print(doping_expr)
-        Neff = eval(doping_expr)
+        Neff = abs(eval(doping_expr))
 
         # SiC mobility
         if(self.model_name == 'SiC'):
@@ -525,7 +525,7 @@ class Drifts:
             FF=self.e_field-self.muhe*np.cross(self.e_field,self.BB)
         #the delta x with electric field
         if(np.linalg.norm(FF)!=0):
-            self.delta_x=-self.sstep*self.charg*FF[0]/np.linalg.norm(FF)
+            self.delta_x=self.sstep*self.charg*FF[0]/np.linalg.norm(FF)
             self.delta_y=-self.sstep*self.charg*FF[1]/np.linalg.norm(FF)
         else:
             self.delta_x=0
@@ -729,8 +729,8 @@ class Drifts:
                 x_array.extend(self.d_dic_p["tk_"+str(i+1)][0])
                 y_array.extend(self.d_dic_p["tk_"+str(i+1)][1])             
                 gr_p = ROOT.TGraph(n,x_array,y_array)
-                gr_p.SetMarkerColor(4)
-                gr_p.SetLineColor(4)
+                gr_p.SetMarkerColor(2)
+                gr_p.SetLineColor(2)
                 gr_p.SetLineStyle(1)
                 mg.Add(gr_p)
                 del x_array[:]
@@ -741,8 +741,8 @@ class Drifts:
                 x_array.extend(self.d_dic_n["tk_"+str(j+1)][0])
                 y_array.extend(self.d_dic_n["tk_"+str(j+1)][1])             
                 gr_n = ROOT.TGraph(m,x_array,y_array)
-                gr_n.SetMarkerColor(2)
-                gr_n.SetLineColor(2)
+                gr_n.SetMarkerColor(4)
+                gr_n.SetLineColor(4)
                 gr_n.SetLineStyle(1)
                 mg.Add(gr_n)
                 del x_array[:]
@@ -821,8 +821,8 @@ def draw_current(det,ele_current,qtot,drift):
     ele_current.Scale(n_scale)
     ele_current.Draw("SAME HIST")
     det.sum_cu.SetLineColor(3)
-    det.positive_cu.SetLineColor(2)
-    det.negtive_cu.SetLineColor(4)
+    det.positive_cu.SetLineColor(4)
+    det.negtive_cu.SetLineColor(2)
     ele_current.SetLineColor(6)
     det.sum_cu.SetLineWidth(2)
     det.positive_cu.SetLineWidth(2)
@@ -868,7 +868,7 @@ def main():
     my_lgad = R2dDetector(50,100) # [um]
 
     # set material
-    my_sic_mat = Material('SiC')
+    my_sic_mat = Material('Si')
     my_lgad.set_mat(my_sic_mat)
 
     # set doping
@@ -876,10 +876,15 @@ def main():
         my_lgad.set_doping("(6.1942*(1e14)/sqrt(2*3.1415926)/0.13821*exp(-pow(x[1]-0.67,2))/2/0.13821/0.13821 + (1e13))*((1.60217733e-19)*(1e6)/(8.854187817e-12)/(9.76))*1e-12") # [cm-3]
     if model == "PIN":
         my_lgad.set_doping("((1e13))*((1.60217733e-19)*(1e6)/(8.854187817e-12)/(9.76))*1e-12") # [cm-3]
+    if model == "LGAD_P_type":
+        my_lgad.set_doping("(6.1942*(1e14)/sqrt(2*3.1415926)/0.13821*exp(-pow(x[1]-0.67,2))/2/0.13821/0.13821 + (1e13))*(-(1.60217733e-19)*(1e6)/(8.854187817e-12)/(9.76))*1e-12") # [cm-3]
 
     # set operating condition
     my_lgad.set_temperature(300) # [K]
-    my_lgad.set_bias_voltage(-200) # [V]
+    if model == ("LGAD" or "PIN"):
+        my_lgad.set_bias_voltage(-200) # [V]
+    if model == "LGAD_P_type":
+        my_lgad.set_bias_voltage(200) # [V]
 
     # mesh
     my_lgad.mesh(0.1, 0.1) # [um]
@@ -889,15 +894,16 @@ def main():
     my_possion_solver.solve()
     my_possion_solver.draw()
 
-    my_track = Tracks()
-    my_track.mips([25,0],[25,50],500)
-
-    drift = Drifts(my_track)
-    drift.ionized_drift(my_track,my_possion_solver,my_lgad)
-    ### after the electronics
-    my_electronics = Amplifier()
-    qtot,ele_current=my_electronics.CSA_amp(my_lgad,t_rise=0.4,t_fall=0.2,trans_imp=10)
-    draw_current(my_lgad,ele_current,qtot,drift)
+    if model == ("LGAD" or "PIN"):
+        my_track = Tracks()
+        my_track.mips([25,0],[25,50],500)
+        drift = Drifts(my_track)
+        drift.ionized_drift(my_track,my_possion_solver,my_lgad)
+        ### after the electronics
+        my_electronics = Amplifier()
+        qtot,ele_current=my_electronics.CSA_amp(my_lgad,t_rise=0.4,t_fall=0.2,trans_imp=10)
+        draw_current(my_lgad,ele_current,qtot,drift)
+    
 
 
 
